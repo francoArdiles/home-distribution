@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Circle, Label } from 'react-konva';
+import { calculateArea, calculatePerimeter, wouldCauseSelfIntersection } from '../utils/geometryUtils';
 
 const TerrainCanvas = ({ onPointsChange, container }) => {
   const stageRef = useRef(null);
@@ -8,6 +9,9 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
   const [hoverSegmentIndex, setHoverSegmentIndex] = useState(-1); // index of segment being hovered
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [tooltipText, setTooltipText] = useState('');
+  const [area, setArea] = useState(0); // area of polygon in square meters
+  const [perimeter, setPerimeter] = useState(0); // perimeter of polygon in meters
+  const [invalidPreview, setInvalidPreview] = useState(false); // whether the preview point would cause self-intersection
   const [scale, setScale] = useState(1); // stage scale (layer to stage)
   const [position, setPosition] = useState({ x: 0, y: 0 }); // stage position (top-left) in stage coordinates
 
@@ -165,12 +169,18 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
     }
     
     // Check self-intersection before adding
-    if (!wouldCauseSelfIntersection(pos)) {
+    if (!wouldCauseSelfIntersection(points, pos)) {
       const newPoints = [...points, pos];
       setPoints(newPoints);
       onPointsChange(newPoints);
+      
+      // Calculate and update area and perimeter
+      const newArea = calculateArea(newPoints);
+      const newPerimeter = calculatePerimeter(newPoints);
+      setArea(newArea);
+      setPerimeter(newPerimeter);
     }
-  }, [finished, getLayerPos, isPointInCanvas, findPointAtPosition, wouldCauseSelfIntersection, points, onPointsChange]);
+  }, [finished, getLayerPos, isPointInCanvas, findPointAtPosition, wouldCauseSelfIntersection, points, onPointsChange, calculateArea, calculatePerimeter]);
 
   // Panning state
   const [isPanning, setIsPanning] = useState(false);
@@ -280,13 +290,19 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
             const lengthPx = Math.sqrt(dx * dx + dy * dy);
             const lengthM = lengthPx / baseScale;
             setTooltipText(`${lengthM.toFixed(precision)} m`);
+            
+            // Check if this preview point would cause self-intersection
+            const wouldIntersect = wouldCauseSelfIntersection(points, pos);
+            setInvalidPreview(wouldIntersect);
           } else {
             setHoverSegmentIndex(-1);
             setTooltipText('');
+            setInvalidPreview(false);
           }
         } else {
           setHoverSegmentIndex(-1);
           setTooltipText('');
+          setInvalidPreview(false);
         }
       }
     } else {
@@ -333,8 +349,14 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
         return newPoints;
       });
       onPointsChange([...points]);
+      
+      // Calculate and update area and perimeter after drag
+      const newArea = calculateArea([...points]);
+      const newPerimeter = calculatePerimeter([...points]);
+      setArea(newArea);
+      setPerimeter(newPerimeter);
     }
-  }, [position, scale, isPointInCanvas, onPointsChange, points]);
+  }, [position, scale, isPointInCanvas, onPointsChange, points, calculateArea, calculatePerimeter]);
 
   const handleKeyDown = useCallback((e) => {
     const key = e.evt.key;
@@ -453,7 +475,7 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
           />
         )}
         
-        {/* Preview line from last point to mouse (dashed blue) */}
+        {/* Preview line from last point to mouse (dashed blue when valid, red when invalid) */}
         {!finished && points.length > 0 && (
           <Line
             points={[
@@ -462,7 +484,7 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
               tooltipPos.x,
               tooltipPos.y
             ]}
-            stroke="blue"
+            stroke={invalidPreview ? "red" : "blue"}
             strokeWidth={1}
             dash={[5, 5]}
           />

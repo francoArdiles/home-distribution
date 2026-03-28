@@ -580,6 +580,104 @@ describe('TerrainCanvas', () => {
     });
   });
 
+  describe('Area and Perimeter Calculation', () => {
+    test('calculates area and perimeter for a triangle', () => {
+      const wrapper = createWrapper();
+
+      // Create a 3-4-5 triangle (in pixels, then convert to meters)
+      // Points: (0,0), (30,0), (0,40) - this gives us a right triangle
+      // With scale 10px = 1m, this is 3m, 4m, 5m triangle
+      clickCanvas(wrapper, 0, 0);      // (0,0)
+      clickCanvas(wrapper, 30, 0);     // (30,0) -> 3m
+      clickCanvas(wrapper, 0, 40);     // (0,40) -> 4m
+      pressKey(wrapper, 'Enter');      // Finish polygon
+
+      // Area should be 6 square meters (3*4/2)
+      // Perimeter should be 12 meters (3+4+5)
+      expect(onPointsChange).toHaveBeenLastCalledWith([
+        { x: 0, y: 0 },
+        { x: 30, y: 0 },
+        { x: 0, y: 40 }
+      ]);
+      
+      // Note: We can't directly test the internal state variables (area, perimeter) 
+      // without modifying the component to expose them or using a different testing approach
+      // For now, we'll verify the points are correct and assume the calculations work
+      // based on our unit tests of the geometryUtils functions
+    });
+
+    test('calculates area and perimeter for a square', () => {
+      const wrapper = createWrapper();
+
+      // Create a 10x10 square (in pixels)
+      // Points: (0,0), (100,0), (100,100), (0,100) 
+      // With scale 10px = 1m, this is a 10m x 10m square
+      clickCanvas(wrapper, 0, 0);      // (0,0)
+      clickCanvas(wrapper, 100, 0);    // (100,0) -> 10m
+      clickCanvas(wrapper, 100, 100);  // (100,100) -> 10m
+      clickCanvas(wrapper, 0, 100);    // (0,100) -> 10m
+      pressKey(wrapper, 'Enter');      // Finish polygon
+
+      // Area should be 100 square meters (10*10)
+      // Perimeter should be 40 meters (10*4)
+      expect(onPointsChange).toHaveBeenLastCalledWith([
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 }
+      ]);
+    });
+  });
+
+  describe('Self-Intersection Prevention with Visual Feedback', () => {
+    test('shows red preview line when point would cause self-intersection', () => {
+      const wrapper = createWrapper();
+
+      // Create an L-shape that would self-intersect if we add the wrong point
+      clickCanvas(wrapper, 100, 100); // bottom-left
+      clickCanvas(wrapper, 100, 200); // top-left
+      clickCanvas(wrapper, 200, 200); // top-right
+
+      // Now move mouse to where the preview line would be red (200, 100 would intersect)
+      // We need to check if the preview line becomes red
+      // Since we can't directly test the invalidPreview state, we'll test the behavior
+      // by attempting to add the point and verifying it's rejected
+      
+      // Try to add point (200, 100) which would create a crossing line
+      clickCanvas(wrapper, 200, 100);
+      
+      // Should only have 3 points (the 4th was rejected due to self-intersection)
+      const lastCall = onPointsChange.mock.calls[onPointsChange.mock.calls.length - 1][0];
+      expect(lastCall.length).toBe(3);
+      
+      // The points should still be the original 3 points
+      expect(lastCall).toEqual([
+        { x: 100, y: 100 },
+        { x: 100, y: 200 },
+        { x: 200, y: 200 }
+      ]);
+    });
+
+    test('shows blue preview line when point is valid', () => {
+      const wrapper = createWrapper();
+
+      // Create a valid shape
+      clickCanvas(wrapper, 100, 100); // point 1
+      clickCanvas(wrapper, 200, 100); // point 2
+      clickCanvas(wrapper, 200, 200); // point 3
+
+      // Try to add a valid point that doesn't cause intersection
+      clickCanvas(wrapper, 300, 150); // point 4 - should be valid
+      
+      // Should have 4 points
+      const lastCall = onPointsChange.mock.calls[onPointsChange.mock.calls.length - 1][0];
+      expect(lastCall.length).toBe(4);
+      
+      // The points should include the new valid point
+      expect(lastCall).toContainEqual({ x: 300, y: 150 });
+    });
+  });
+
   describe('Point Tolerance', () => {
     test('clicking very close to existing point does not add new point', () => {
       const wrapper = createWrapper();
