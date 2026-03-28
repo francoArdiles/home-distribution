@@ -1,0 +1,39 @@
+{
+  "name": "home-distribution",
+  "version": "0.1.0",
+  "description": "Aplicación web para diseñar y planificar la distribución de elementos en un terreno para vivienda autosustentable",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .js,.jsx",
+    "test": "jest"
+  },
+  "keywords": [
+    "terreno",
+    "distribución",
+    "autosustentable",
+    "permacultura",
+    "diseño",
+    "planificación"
+  ],
+  "author": "ZeroClaw Assistant",
+  "license": "MIT",
+  "dependencies": {
+    "konva": "^9.2.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-konva": "^18.2.5"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@vitejs/plugin-react": "^4.0.0",
+    "eslint": "^8.35.0",
+    "eslint-plugin-react": "^7.32.2",
+    "jest": "^30.3.0",
+    "vite": "^4.2.0",
+    "vitest": "^0.29.0"
+  }
+}

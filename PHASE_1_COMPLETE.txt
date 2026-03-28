@@ -1,0 +1,22 @@
+Phase 1 completed: TerrainCanvas component implemented with free polygon drawing tools.
+Timestamp: 2026-03-25 13:49:37 UTC
+Features implemented:
+- Origin at bottom-left of canvas
+- Scale: 10px = 1m (adjustable via stage scale)
+- Canvas size: 100% of container
+- Precision: 1 decimal for measurements (tooltip)
+- Terrain polygon: brown border (no fill)
+- Control points: red circles
+- Preview line: blue dashed (drawn while adding points)
+- Tooltip: white background, normal text, shows segment length on hover (1 decimal)
+- Interactions:
+  * Click to add point
+  * Enter to finish polygon (min 3 points)
+  * Escape to cancel current drawing
+  * Backspace/Delete to remove last point
+  * Points can be moved after creation (2px tolerance for drag start)
+  * No self-intersecting polygons allowed (checked before adding point)
+  * Auto-close polygon upon completion (not visually closed but points stored; could be rendered as closed line if needed)
+  * Zoom and pan enabled on canvas (via mouse drag and wheel)
+The component uses React and Konva.js, follows TDD (tests written in src/components/__tests__/TerrainCanvas.test.jsx).
+All tests pass.
