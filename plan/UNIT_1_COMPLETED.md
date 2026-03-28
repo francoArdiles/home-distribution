@@ -1,48 +1,43 @@
 # Unit 1 Completed — Basic TerrainCanvas
 
-**Completed**: 2026-03-28T00:58:40Z
-**Cron Job**: c4ca6e0f-928d-4add-8837-478f3bce5668
+**Date:** 2026-03-28
+**Unit:** 1 of home-distribution project
+**Description:** Basic TerrainCanvas with bottom-left origin and 100% size using React/Konva.js
 
 ## Files
 
-- `src/components/TerrainCanvas.jsx` — Functional component using `react-konva` (Stage, Layer, Line, Circle, Label)
-- `src/components/__tests__/TerrainCanvas.test.jsx` — Test suite with 10 passing tests (mocked react-konva)
+| File | Status |
+|------|--------|
+| `src/components/TerrainCanvas.jsx` | ✅ Already exists (full implementation) |
+| `src/components/__tests__/TerrainCanvas.test.jsx` | ✅ Already exists (11 tests) |
 
 ## Implementation Summary
 
-The TerrainCanvas component was built during Phase 1 and already satisfies all Unit 1 requirements plus the full specification:
+The TerrainCanvas component was fully implemented in Phase 1 and covers all Unit 1 requirements plus subsequent units:
 
-| Requirement | Status |
-|---|---|
-| Konva Stage with width/height 100% | ✅ Line 251-252 |
-| Bottom-left origin (coordinate transform) | ✅ `getLayerPos` / `getStagePos` helpers |
-| Click to add points | ✅ `handleClick` |
-| Enter to finish (min 3 points) | ✅ `handleKeyDown` |
-| Escape to cancel | ✅ Clears all points |
-| Backspace/Delete to remove last point | ✅ Removes from array |
-| Move points (draggable circles) | ✅ Circle `draggable` + `onDragEnd` |
-| Auto-close polygon | ✅ Closing Line rendered when finished |
-| No self-intersection | ✅ `wouldCauseSelfIntersection` with orientation test |
-| Preview segment length tooltip | ✅ Label on hover, distance calculation |
-| Scale: 10px = 1m | ✅ `baseScale = 10` |
-| Precision: 1 decimal | ✅ `precision = 1` |
-| Visual: brown border, red circles, blue dashed preview | ✅ stroke brown, circles red |
-| Zoom (wheel) | ✅ `handleWheel` |
-| Pan (drag) | ✅ `handleStageMouseDown/Move/Up` |
+- **Konva Stage** with `width="100%"` and `height="100%"`
+- **Bottom-left origin** via layer coordinate conversion (`getLayerPos` / `getStagePos`)
+- **Scale:** 10px = 1m (configurable `baseScale`)
+- **Precision:** 1 decimal place for length display
+- **Visual style:** Brown polygon border, red control points, blue dashed preview, white tooltip background
+- **Interactions:** Click to add points, Enter to finish, Escape to cancel, Backspace/Delete to remove last point, point dragging with tolerance
+- **Validation:** Minimum 3 points, self-intersection prevention, auto-close on finish
+- **Zoom & Pan:** Mouse wheel zoom (0.1x–10x), drag to pan
 
-## Test Coverage (10 tests)
+## Test Coverage (11 tests)
 
 1. Renders without errors
 2. Initial state has empty points array
 3. Adding points via click increases count
 4. Enter finishes polygon (≥3 points)
-5. Enter does nothing (<3 points)
+5. Enter does nothing with <3 points
 6. Escape clears all points
 7. Backspace removes last point
 8. Delete removes last point
 9. Prevents self-intersecting polygons
 10. Allows non-intersecting points
+11. Calls onPointsChange prop
 
 ## Next Step
 
-**Unit 2**: Point addition logic refinements — click tolerance for existing points, snapping, and enhanced interaction feedback.
+**Unit 2** — Point addition logic with coordinate snapping and grid overlay (if not already covered by existing implementation).
