@@ -274,13 +274,12 @@ const TerrainCanvas = ({ onPointsChange }) => {
         {/* Draw closing line if finished and at least 3 points */}
         {finished && points.length >= 3 && (
           <Line
-            points=[{
-                const last = points[points.length - 1];
-                const first = points[0];
-                const lastStage = getStagePos(last);
-                const firstStage = getStagePos(first);
-                return [lastStage.x, lastStage.y, firstStage.x, firstStage.y];
-              }]
+            points={[
+              getStagePos(points[points.length - 1]).x,
+              getStagePos(points[points.length - 1]).y,
+              getStagePos(points[0]).x,
+              getStagePos(points[0]).y
+            ]}
             stroke="brown"
             strokeWidth={2}
             lineJoin="round"
