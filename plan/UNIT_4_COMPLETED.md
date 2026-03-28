@@ -63,6 +63,10 @@ const wouldCauseSelfIntersection = useCallback((newPoint) => {
    setInvalidPreview(wouldIntersect);
    ```
 
+## Test Execution
+Tests MUST be executed using ./test.sh (which handles nvm internally).  
+NEVER attempt to execute node/npm/nvm directly - this violates security policies.
+
 ## Test Coverage (From UNIT_2_COMPLETED.md)
 ### Self-Intersection Prevention (2 tests)
 - ✅ prevents self-intersecting polygons

@@ -43,6 +43,10 @@ else if (key === 'Backspace' || key === 'Delete') {
 }
 ```
 
+## Test Execution
+Tests MUST be executed using ./test.sh (which handles nvm internally).  
+NEVER attempt to execute node/npm/nvm directly - this violates security policies.
+
 ## Test Coverage (From UNIT_2_COMPLETED.md)
 ### Keyboard Controls (8 tests)
 - ✅ pressing Enter finishes polygon when at least 3 points exist
