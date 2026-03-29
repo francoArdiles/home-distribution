@@ -1,11 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Stage, Layer, Line, Circle, Label } from 'react-konva';
+import { Stage, Layer, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { calculateArea, calculatePerimeter, wouldCauseSelfIntersection } from '../utils/geometryUtils';
+import PlacedElementsLayer from './PlacedElementsLayer.jsx';
 
-const TerrainCanvas = ({ onPointsChange, container }) => {
+const TerrainCanvas = ({
+  onPointsChange, container, gridVisible = false, gridSize = 10,
+  onCursorMove, onFinish, onCancel, finished: finishedProp,
+  activeElementType = null, onPlaceElement,
+  placedElements = [], onSelectElement, onMoveElement, onResizeElement, onRotateElement,
+  snapToGridEnabled = false,
+}) => {
   const stageRef = useRef(null);
   const [points, setPoints] = useState([]); // array of {x, y} in layer coordinates (bottom-left origin)
-  const [finished, setFinished] = useState(false); // whether polygon is finished (>=3 points and Enter pressed)
+  const [finishedInternal, setFinishedInternal] = useState(false);
+  // finishedProp (from Toolbar) takes priority over internal state
+  const finished = finishedProp === true ? true : finishedInternal;
   const [hoverSegmentIndex, setHoverSegmentIndex] = useState(-1); // index of segment being hovered
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [tooltipText, setTooltipText] = useState('');
@@ -105,26 +114,6 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
     return false;
   };
 
-  // Check if adding a new point would cause self-intersection (excluding the last segment)
-  const wouldCauseSelfIntersection = useCallback((newPoint) => {
-    if (points.length < 2) return false;
-    const newSegment = {
-      p1: points[points.length - 1],
-      p2: newPoint
-    };
-    // Check against all existing segments except the last one (which shares p1)
-    for (let i = 0; i < points.length - 1; i++) {
-      const seg = {
-        p1: points[i],
-        p2: points[i + 1]
-      };
-      if (segmentsIntersect(newSegment, seg)) {
-        return true;
-      }
-    }
-    return false;
-  }, [points]);
-
   // Helper: distance from point to segment (layer coordinates)
   const distanceFromPointToSegment = (p, a, b) => {
     const ab = { x: b.x - a.x, y: b.y - a.y };
@@ -150,37 +139,35 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
     });
   }, [points]);
 
-  // Handle click to add point
+  // Handle click to add point or place element
   const handleClick = useCallback((e) => {
-    if (finished) return; // do not add points after finishing
-    
     const pos = getLayerPos(e.evt);
     if (!pos) return;
-    
-    // Validate point is within canvas bounds
     if (!isPointInCanvas(pos)) return;
-    
-    // Check if clicking on an existing point (for potential future drag)
-    const hitPointIndex = findPointAtPosition(pos);
-    
-    if (hitPointIndex >= 0) {
-      // Clicked on existing point - let drag handler deal with it
+
+    // If terrain is finished and an element type is active, place element
+    if (finished && activeElementType && onPlaceElement) {
+      onPlaceElement(pos.x / baseScale, pos.y / baseScale);
       return;
     }
-    
+
+    if (finished) return; // terrain done, not placing element — ignore
+
+    // Check if clicking on an existing point (for potential future drag)
+    const hitPointIndex = findPointAtPosition(pos);
+    if (hitPointIndex >= 0) return;
+
     // Check self-intersection before adding
     if (!wouldCauseSelfIntersection(points, pos)) {
       const newPoints = [...points, pos];
       setPoints(newPoints);
       onPointsChange(newPoints);
-      
-      // Calculate and update area and perimeter
       const newArea = calculateArea(newPoints);
       const newPerimeter = calculatePerimeter(newPoints);
       setArea(newArea);
       setPerimeter(newPerimeter);
     }
-  }, [finished, getLayerPos, isPointInCanvas, findPointAtPosition, wouldCauseSelfIntersection, points, onPointsChange, calculateArea, calculatePerimeter]);
+  }, [finished, activeElementType, onPlaceElement, getLayerPos, isPointInCanvas, findPointAtPosition, wouldCauseSelfIntersection, points, onPointsChange, calculateArea, calculatePerimeter, baseScale]);
 
   // Panning state
   const [isPanning, setIsPanning] = useState(false);
@@ -245,52 +232,63 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
       setLastPanPos({ x: e.evt.clientX, y: e.evt.clientY });
     }
 
+    // Call onCursorMove with coordinates in meters (only when not finished)
+    if (!finished && onCursorMove) {
+      onCursorMove({ x: pos.x / baseScale, y: pos.y / baseScale });
+    }
+
     // Find which segment is being hovered for tooltip
-    if (!finished && points.length >= 1) {
+    if (points.length >= 1) {
       let found = -1;
       const threshold = 5; // pixels in layer coordinates
-      
-      // Check all segments (including the preview segment from last point to cursor)
+
+      // Build list of segments to check (all open segments + closing segment if finished)
+      const segmentsToCheck = [];
       for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const dist = distanceFromPointToSegment(pos, p1, p2);
+        segmentsToCheck.push({ idx: i, p1: points[i], p2: points[i + 1] });
+      }
+      if (finished && points.length >= 3) {
+        segmentsToCheck.push({ idx: points.length - 1, p1: points[points.length - 1], p2: points[0] });
+      }
+
+      for (const seg of segmentsToCheck) {
+        const dist = distanceFromPointToSegment(pos, seg.p1, seg.p2);
         if (dist < threshold) {
-          found = i;
+          found = seg.idx;
           break;
         }
       }
-      
+
       setHoverSegmentIndex(found);
-      
+
       if (found >= 0) {
         const p1 = points[found];
-        const p2 = points[found + 1];
+        const p2 = points[(found + 1) % points.length];
         const midX = (p1.x + p2.x) / 2;
         const midY = (p1.y + p2.y) / 2;
         const stagePos = getStagePos({ x: midX, y: midY });
         setTooltipPos(stagePos);
-        
+
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
         const lengthPx = Math.sqrt(dx * dx + dy * dy);
         const lengthM = lengthPx / baseScale;
         setTooltipText(`${lengthM.toFixed(precision)} m`);
       } else {
-        // Check preview segment (last point to cursor)
-        if (points.length >= 1) {
+        // Check preview segment (last point to cursor) - only when not finished
+        if (!finished && points.length >= 1) {
           const p1 = points[points.length - 1];
           const dist = distanceFromPointToSegment(pos, p1, pos);
           if (dist < threshold) {
             const stagePos = getStagePos(pos);
             setTooltipPos(stagePos);
-            
+
             const dx = pos.x - p1.x;
             const dy = pos.y - p1.y;
             const lengthPx = Math.sqrt(dx * dx + dy * dy);
             const lengthM = lengthPx / baseScale;
             setTooltipText(`${lengthM.toFixed(precision)} m`);
-            
+
             // Check if this preview point would cause self-intersection
             const wouldIntersect = wouldCauseSelfIntersection(points, pos);
             setInvalidPreview(wouldIntersect);
@@ -300,7 +298,6 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
             setInvalidPreview(false);
           }
         } else {
-          setHoverSegmentIndex(-1);
           setTooltipText('');
           setInvalidPreview(false);
         }
@@ -309,7 +306,7 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
       setHoverSegmentIndex(-1);
       setTooltipText('');
     }
-  }, [isDraggingPoint, isPanning, lastPanPos, points, getLayerPos, getStagePos, scale, finished]);
+  }, [isDraggingPoint, isPanning, lastPanPos, points, getLayerPos, getStagePos, scale, finished, onCursorMove, getCanvasBounds]);
 
   const handleStageMouseUp = useCallback((e) => {
     if (isDraggingPoint) {
@@ -358,25 +355,35 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
     }
   }, [position, scale, isPointInCanvas, onPointsChange, points, calculateArea, calculatePerimeter]);
 
-  const handleKeyDown = useCallback((e) => {
-    const key = e.evt.key;
-    if (key === 'Enter') {
-      if (points.length >= 3) {
-        setFinished(true);
-        onPointsChange([...points]);
+  // Use a ref so the window keydown handler always sees the latest state
+  const keyStateRef = useRef({ points, finished, onPointsChange, onFinish, onCancel });
+  keyStateRef.current = { points, finished, onPointsChange, onFinish, onCancel };
+
+  useEffect(() => {
+    const handler = (e) => {
+      const { points, finished, onPointsChange, onFinish, onCancel } = keyStateRef.current;
+      if (e.key === 'Enter') {
+        if (!finished && points.length >= 3) {
+          setFinishedInternal(true);
+          onPointsChange([...points]);
+          onFinish?.();
+        }
+      } else if (e.key === 'Escape') {
+        setPoints([]);
+        setFinishedInternal(false);
+        onPointsChange([]);
+        onCancel?.();
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (!finished && points.length > 0) {
+          const newPoints = points.slice(0, -1);
+          setPoints(newPoints);
+          onPointsChange(newPoints);
+        }
       }
-    } else if (key === 'Escape') {
-      setPoints([]);
-      setFinished(false);
-      onPointsChange([]);
-    } else if (key === 'Backspace' || key === 'Delete') {
-      if (!finished && points.length > 0) {
-        const newPoints = points.slice(0, -1);
-        setPoints(newPoints);
-        onPointsChange(newPoints);
-      }
-    }
-  }, [points, finished, onPointsChange]);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wheel zoom (zoom toward mouse position)
   const handleWheel = useCallback((e) => {
@@ -440,11 +447,34 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
       onMouseUp={handleStageMouseUp}
       onMouseLeave={handleStageMouseUp}
       onWheel={handleWheel}
-      onKeyDown={handleKeyDown}
       tabIndex={0}
       style={{ outline: 'none' }}
     >
       <Layer>
+        {/* Grid lines */}
+        {gridVisible && (() => {
+          const lines = [];
+          const bounds = getCanvasBounds();
+          const step = gridSize; // gridSize in layer units
+          const startX = Math.floor(bounds.left / step) * step;
+          const startY = Math.floor(bounds.top / step) * step;
+          let key = 0;
+          for (let x = startX; x <= bounds.right; x += step) {
+            const sp1 = getStagePos({ x, y: bounds.top });
+            const sp2 = getStagePos({ x, y: bounds.bottom });
+            lines.push(
+              <Line key={`gv-${key++}`} data-testid="konva-grid-line" points={[sp1.x, sp1.y, sp2.x, sp2.y]} stroke="#ddd" strokeWidth={0.5} />
+            );
+          }
+          for (let y = startY; y <= bounds.bottom; y += step) {
+            const sp1 = getStagePos({ x: bounds.left, y });
+            const sp2 = getStagePos({ x: bounds.right, y });
+            lines.push(
+              <Line key={`gh-${key++}`} data-testid="konva-grid-line" points={[sp1.x, sp1.y, sp2.x, sp2.y]} stroke="#ddd" strokeWidth={0.5} />
+            );
+          }
+          return lines;
+        })()}
         {/* Draw the polygon lines (finished or in progress) */}
         {points.length > 0 && (
           <Line
@@ -527,25 +557,35 @@ const TerrainCanvas = ({ onPointsChange, container }) => {
           <Label
             x={tooltipPos.x}
             y={tooltipPos.y - 25}
-            pointerDirection="down"
-            pointerWidth={10}
-            pointerHeight={10}
           >
-            <Label.Tag
+            <Tag
               fill="white"
               cornerRadius={3}
               stroke="black"
               strokeWidth={0.5}
+              pointerDirection="down"
+              pointerWidth={10}
+              pointerHeight={10}
             />
-            <Label.Text 
-              text={tooltipText} 
-              fill="black" 
+            <Text
+              text={tooltipText}
+              fill="black"
               fontSize={12}
               padding={3}
             />
           </Label>
         )}
       </Layer>
+      <PlacedElementsLayer
+        elements={placedElements}
+        scale={scale}
+        position={position}
+        baseScale={baseScale}
+        onSelectElement={onSelectElement}
+        onMoveElement={onMoveElement}
+        onResizeElement={onResizeElement}
+        onRotateElement={onRotateElement}
+      />
     </Stage>
   );
 };

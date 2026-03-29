@@ -108,8 +108,8 @@ export const wouldCauseSelfIntersection = (existingPoints, newPoint) => {
     p2: newPoint
   };
   
-  // Check against all existing segments except the last one (which shares p1)
-  for (let i = 0; i < existingPoints.length - 1; i++) {
+  // Check against all existing segments except the last one (which shares p1 with the new segment)
+  for (let i = 0; i < existingPoints.length - 2; i++) {
     const seg = {
       p1: existingPoints[i],
       p2: existingPoints[i + 1]
