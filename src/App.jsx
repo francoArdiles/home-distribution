@@ -13,6 +13,10 @@ import SolarPanel from './components/SolarPanel.jsx';
 import CardinalLayer from './components/CardinalLayer.jsx';
 import SolarPathLayer from './components/SolarPathLayer.jsx';
 import ShadowLayer from './components/ShadowLayer.jsx';
+import { defaultMeasurementConfig, addMeasurement, clearMeasurements, setActiveTool, addConstraint, removeConstraint, toggleConstraint } from './utils/measurementConfigUtils.js';
+import { validateAllConstraints } from './utils/constraintUtils.js';
+import MeasurementToolkit from './components/MeasurementToolkit.jsx';
+import ConstraintPanel from './components/ConstraintPanel.jsx';
 
 const baseScale = 10;
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -36,8 +40,35 @@ function App() {
   const [solarPanelOpen, setSolarPanelOpen] = useState(false);
   const [solarConfig, setSolarConfig] = useState(defaultSolarConfig);
 
+  // Measurement state
+  const [measurementConfig, setMeasurementConfig] = useState(defaultMeasurementConfig);
+  const [measurementPanelOpen, setMeasurementPanelOpen] = useState(false);
+
   const handleSolarConfigChange = useCallback((partial) => {
     setSolarConfig(prev => mergeSolarConfig(prev, partial));
+  }, []);
+
+  // --- Measurement handlers ---
+  const handleAddMeasurement = useCallback((m) => {
+    setMeasurementConfig(prev => addMeasurement(prev, m));
+  }, []);
+  const handleClearMeasurements = useCallback(() => {
+    setMeasurementConfig(prev => clearMeasurements(prev));
+  }, []);
+  const handleSetActiveTool = useCallback((tool) => {
+    setMeasurementConfig(prev => setActiveTool(prev, tool));
+  }, []);
+  const handleAddConstraint = useCallback((c) => {
+    setMeasurementConfig(prev => addConstraint(prev, c));
+  }, []);
+  const handleRemoveConstraint = useCallback((id) => {
+    setMeasurementConfig(prev => removeConstraint(prev, id));
+  }, []);
+  const handleToggleConstraint = useCallback((id) => {
+    setMeasurementConfig(prev => toggleConstraint(prev, id));
+  }, []);
+  const handleToggleMeasurements = useCallback(() => {
+    setMeasurementPanelOpen(prev => !prev);
   }, []);
 
   // --- Terrain handlers ---
@@ -121,11 +152,16 @@ function App() {
     );
   }, []);
 
-  // Keyboard shortcut: S = toggle solar overlay
+  // Keyboard shortcut: S = toggle solar overlay, M = toggle distance tool
   useEffect(() => {
     const handler = (e) => {
       if (!finished) return;
       if (e.key === 's' || e.key === 'S') setSolarVisible(prev => !prev);
+      if (e.key === 'm' || e.key === 'M') {
+        setMeasurementConfig(prev =>
+          setActiveTool(prev, prev.activeTool === 'distance' ? 'none' : 'distance')
+        );
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -164,6 +200,7 @@ function App() {
         onClear={handleClear}
         solarVisible={solarVisible}
         onToggleSolar={() => { setSolarVisible(v => !v); setSolarPanelOpen(v => !v); }}
+        onToggleMeasurements={handleToggleMeasurements}
       />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {finished && (
@@ -190,6 +227,10 @@ function App() {
             snapToGridEnabled={gridVisible}
             solarVisible={solarVisible}
             solarConfig={solarConfig}
+            measurementConfig={measurementConfig}
+            onAddMeasurement={handleAddMeasurement}
+            onSetActiveTool={handleSetActiveTool}
+            selectedElementId={selectedElementId}
           />
         </div>
         <InfoPanel
@@ -206,6 +247,27 @@ function App() {
             solarConfig={solarConfig}
             onConfigChange={handleSolarConfigChange}
             onClose={() => setSolarPanelOpen(false)}
+          />
+        </div>
+      )}
+      {measurementPanelOpen && finished && (
+        <div style={{ position: 'fixed', top: 60, left: 200, zIndex: 100 }}>
+          <MeasurementToolkit
+            activeTool={measurementConfig.activeTool}
+            onSelectTool={handleSetActiveTool}
+            onClearMeasurements={handleClearMeasurements}
+            showMeasurements={measurementConfig.showMeasurements}
+            showConstraints={measurementConfig.showConstraints}
+            onToggleMeasurements={() => setMeasurementConfig(prev => ({ ...prev, showMeasurements: !prev.showMeasurements }))}
+            onToggleConstraints={() => setMeasurementConfig(prev => ({ ...prev, showConstraints: !prev.showConstraints }))}
+          />
+          <ConstraintPanel
+            constraints={measurementConfig.constraints}
+            elements={placedElements}
+            onAddConstraint={handleAddConstraint}
+            onRemoveConstraint={handleRemoveConstraint}
+            onToggleConstraint={handleToggleConstraint}
+            validationResults={validateAllConstraints(measurementConfig.constraints, placedElements, points, baseScale)}
           />
         </div>
       )}

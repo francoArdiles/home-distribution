@@ -7,6 +7,8 @@ import { isRectangleInPolygon, isCircleInPolygon, snapToGrid } from '../utils/co
 const SELECTION_STROKE = '#0099FF';
 const SELECTION_STROKE_WIDTH = 3;
 
+const VIOLATION_STROKE = '#F44336';
+
 const PlacedElementsLayer = ({
   elements = [],
   scale = 1,
@@ -14,6 +16,7 @@ const PlacedElementsLayer = ({
   baseScale = 10,
   terrainPoints = [],
   snapToGridEnabled = false,
+  violatingIds = null,
   onSelectElement,
   onMoveElement,
   onResizeElement,
@@ -30,7 +33,8 @@ const PlacedElementsLayer = ({
         const def = getElementDefinition(el.definitionId);
         const shape = el.shape || def?.shape || 'rectangle';
         const fill = el.color || def?.color || '#ccc';
-        const stroke = el.isSelected ? SELECTION_STROKE : (el.borderColor || def?.borderColor || '#000');
+        const isViolating = violatingIds && (violatingIds instanceof Set ? violatingIds.has(el.id) : violatingIds.includes(el.id));
+        const stroke = isViolating ? VIOLATION_STROKE : (el.isSelected ? SELECTION_STROKE : (el.borderColor || def?.borderColor || '#000'));
         const strokeWidth = el.isSelected ? SELECTION_STROKE_WIDTH : (el.borderWidth || def?.borderWidth || 1);
         const sx = stageX(el.x);
         const sy = stageY(el.y);

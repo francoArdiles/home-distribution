@@ -5,6 +5,7 @@ import PlacedElementsLayer from './PlacedElementsLayer.jsx';
 import CardinalLayer from './CardinalLayer.jsx';
 import SolarPathLayer from './SolarPathLayer.jsx';
 import ShadowLayer from './ShadowLayer.jsx';
+import MeasurementOverlay from './MeasurementOverlay.jsx';
 
 const TerrainCanvas = ({
   onPointsChange, container, gridVisible = false, gridSize = 10,
@@ -13,6 +14,10 @@ const TerrainCanvas = ({
   placedElements = [], onSelectElement, onMoveElement, onResizeElement, onRotateElement,
   snapToGridEnabled = false,
   solarVisible = false, solarConfig = null,
+  measurementConfig = null,
+  onAddMeasurement, onSetActiveTool,
+  selectedElementId = null,
+  violatingIds = null,
 }) => {
   const stageRef = useRef(null);
   const [points, setPoints] = useState([]); // array of {x, y} in layer coordinates (bottom-left origin)
@@ -587,11 +592,32 @@ const TerrainCanvas = ({
         baseScale={baseScale}
         terrainPoints={points}
         snapToGridEnabled={snapToGridEnabled}
+        violatingIds={violatingIds}
         onSelectElement={onSelectElement}
         onMoveElement={onMoveElement}
         onResizeElement={onResizeElement}
         onRotateElement={onRotateElement}
       />
+      {measurementConfig && (
+        <MeasurementOverlay
+          activeTool={measurementConfig.activeTool}
+          activeMeasurements={measurementConfig.activeMeasurements}
+          constraints={measurementConfig.constraints}
+          validationResults={[]}
+          selectedElementId={selectedElementId}
+          elements={placedElements}
+          terrainPoints={points}
+          scale={scale}
+          position={position}
+          baseScale={baseScale}
+          width={stageWidth}
+          height={stageHeight}
+          showMeasurements={measurementConfig.showMeasurements}
+          showConstraints={measurementConfig.showConstraints}
+          onAddMeasurement={onAddMeasurement}
+          onCancel={() => onSetActiveTool?.('none')}
+        />
+      )}
       {solarVisible && solarConfig && solarConfig.displayOptions.showShadows && (
         <ShadowLayer
           elements={placedElements}
