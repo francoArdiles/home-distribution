@@ -609,6 +609,7 @@ const TerrainCanvas = ({
           scale={scale}
           position={position}
           baseScale={baseScale}
+          terrainPoints={points}
         />
       )}
       {solarVisible && solarConfig && solarConfig.displayOptions.showCardinals && (
