@@ -4,9 +4,8 @@ import '@testing-library/jest-dom';
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 import PlacedElementsLayer from '../PlacedElementsLayer.jsx';
 
-// Module-level object — Circle mock closes over this by reference, so it works
-// even though vi.mock is hoisted (the Circle function body runs at render time)
-const captured = { resizeHandlers: [], rotateHandler: null };
+// Module-level object — mocks close over this by reference (run at render time, not hoist time)
+const captured = { moveHandler: null, resizeHandlers: [], rotateHandler: null };
 
 vi.mock('react-konva', () => {
   const Stage = React.forwardRef(({ children, ...props }, ref) => {
@@ -16,18 +15,22 @@ vi.mock('react-konva', () => {
   return {
     Stage,
     Layer: ({ children }) => <div data-testid="konva-layer">{children}</div>,
-    Rect: ({ x, y, width, height, fill, stroke, strokeWidth, draggable, onClick, onDragEnd, rotation, ...props }) => (
-      <div
-        data-testid="konva-rect"
-        data-x={x} data-y={y} data-width={width} data-height={height}
-        data-fill={fill} data-stroke={stroke} data-stroke-width={strokeWidth}
-        data-draggable={String(draggable)} data-rotation={rotation}
-        onClick={onClick}
-        {...props}
-      />
-    ),
+    Rect: ({ x, y, width, height, fill, stroke, strokeWidth, draggable, onClick, onDragEnd, rotation, ...props }) => {
+      if (onDragEnd) captured.moveHandler = onDragEnd;
+      return (
+        <div
+          data-testid="konva-rect"
+          data-x={x} data-y={y} data-width={width} data-height={height}
+          data-fill={fill} data-stroke={stroke} data-stroke-width={strokeWidth}
+          data-draggable={String(draggable)} data-rotation={rotation}
+          onClick={onClick}
+          {...props}
+        />
+      );
+    },
     Circle: ({ x, y, radius, fill, stroke, strokeWidth, draggable, onClick, onDragEnd, rotation, ...props }) => {
       const testId = props['data-testid'] || 'konva-circle-element';
+      if (testId === 'konva-circle-element' && onDragEnd) captured.moveHandler = onDragEnd;
       if (testId === 'resize-handle' && onDragEnd) captured.resizeHandlers.push(onDragEnd);
       if (testId === 'rotation-handle' && onDragEnd) captured.rotateHandler = onDragEnd;
       return (
@@ -95,6 +98,7 @@ describe('PlacedElementsLayer', () => {
     baseProps.onMoveElement = vi.fn();
     baseProps.onResizeElement = vi.fn();
     baseProps.onRotateElement = vi.fn();
+    captured.moveHandler = null;
     captured.resizeHandlers = [];
     captured.rotateHandler = null;
   });
@@ -215,6 +219,84 @@ describe('Rotation handle (F2-U8)', () => {
     expect(baseProps.onRotateElement).toHaveBeenCalledWith(rectElement.id, expect.any(Number));
     const angle = baseProps.onRotateElement.mock.calls[0][1];
     expect(angle).toBeCloseTo(90, 0);
+  });
+});
+
+// terrain: 20x20 meter square → layer pixels 0-200
+const squareTerrain = [
+  { x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 200 }, { x: 0, y: 200 },
+];
+
+describe('F2-U10: Snap to grid on drag', () => {
+  beforeEach(() => {
+    captured.moveHandler = null;
+    baseProps.onMoveElement = vi.fn();
+  });
+
+  test('with snapToGridEnabled, position is rounded to nearest meter', () => {
+    // rectElement: x=5,y=5 (center meters), w=10,h=8. Rect rendered at sx-w/2=0,sy-h/2=10
+    render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} snapToGridEnabled={true} terrainPoints={squareTerrain} />);
+    expect(captured.moveHandler).toBeDefined();
+    // drag rect top-left to (23, 37) → center = (23+50, 37+40) = (73,77) → 7.3m, 7.7m → snapped to 7m, 8m
+    captured.moveHandler({ target: { x: () => 23, y: () => 37, position: vi.fn() } });
+    expect(baseProps.onMoveElement).toHaveBeenCalledWith(rectElement.id, 7, 8);
+  });
+
+  test('without snapToGridEnabled, position is exact', () => {
+    render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} snapToGridEnabled={false} terrainPoints={squareTerrain} />);
+    // drag rect top-left to (23, 37) → center = (73, 77) → 7.3m, 7.7m
+    captured.moveHandler({ target: { x: () => 23, y: () => 37, position: vi.fn() } });
+    expect(baseProps.onMoveElement).toHaveBeenCalledWith(rectElement.id, 7.3, 7.7);
+  });
+
+  test('snap works for circle elements', () => {
+    const circ = { ...circleElement, shape: 'circle' };
+    render(<PlacedElementsLayer {...baseProps} elements={[circ]} snapToGridEnabled={true} terrainPoints={squareTerrain} />);
+    // circle center at sx=30,sy=30. Drag to (34,37) → 3.4m,3.7m → snapped to 3m,4m
+    captured.moveHandler({ target: { x: () => 34, y: () => 37, position: vi.fn() } });
+    expect(baseProps.onMoveElement).toHaveBeenCalledWith(circ.id, 3, 4);
+  });
+});
+
+describe('F2-U6: Collision detection on drag', () => {
+  beforeEach(() => {
+    captured.moveHandler = null;
+    baseProps.onMoveElement = vi.fn();
+  });
+
+  test('drag within terrain calls onMoveElement', () => {
+    render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} terrainPoints={squareTerrain} />);
+    // center → (100,100) stage px → 10m,10m. Rect from (5,6) to (15,14) meters — inside 20x20m
+    captured.moveHandler({ target: { x: () => 50, y: () => 60, position: vi.fn() } });
+    expect(baseProps.onMoveElement).toHaveBeenCalled();
+  });
+
+  test('drag outside terrain does NOT call onMoveElement', () => {
+    render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} terrainPoints={squareTerrain} />);
+    // center → (300,100) stage px → 30m,10m. Rect right edge = 35m = 350px > 200px → outside
+    captured.moveHandler({ target: { x: () => 250, y: () => 60, position: vi.fn() } });
+    expect(baseProps.onMoveElement).not.toHaveBeenCalled();
+  });
+
+  test('drag outside terrain resets Konva node position', () => {
+    const mockReset = vi.fn();
+    render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} terrainPoints={squareTerrain} />);
+    captured.moveHandler({ target: { x: () => 250, y: () => 60, position: mockReset } });
+    expect(mockReset).toHaveBeenCalled();
+  });
+
+  test('without terrainPoints no collision check, always calls onMoveElement', () => {
+    render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} terrainPoints={[]} />);
+    captured.moveHandler({ target: { x: () => 250, y: () => 60, position: vi.fn() } });
+    expect(baseProps.onMoveElement).toHaveBeenCalled();
+  });
+
+  test('circle drag outside terrain does NOT call onMoveElement', () => {
+    const circ = { ...circleElement, shape: 'circle' };
+    render(<PlacedElementsLayer {...baseProps} elements={[circ]} terrainPoints={squareTerrain} />);
+    // circle center → (190,30) px → 19m,3m. radius=2m=20px → right edge at (190+20=210 > 200) → outside
+    captured.moveHandler({ target: { x: () => 190, y: () => 30, position: vi.fn() } });
+    expect(baseProps.onMoveElement).not.toHaveBeenCalled();
   });
 });
 

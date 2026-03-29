@@ -2,6 +2,7 @@ import React from 'react';
 import { Layer, Rect, Circle, Text, Group } from 'react-konva';
 import { getElementDefinition } from '../data/elementDefinitions.js';
 import { calculateRectResize, calculateCircleResize, calculateRotation } from '../utils/elementUtils.js';
+import { isRectangleInPolygon, isCircleInPolygon, snapToGrid } from '../utils/collisionUtils.js';
 
 const SELECTION_STROKE = '#0099FF';
 const SELECTION_STROKE_WIDTH = 3;
@@ -11,6 +12,8 @@ const PlacedElementsLayer = ({
   scale = 1,
   position = { x: 0, y: 0 },
   baseScale = 10,
+  terrainPoints = [],
+  snapToGridEnabled = false,
   onSelectElement,
   onMoveElement,
   onResizeElement,
@@ -38,8 +41,34 @@ const PlacedElementsLayer = ({
         const handleClick = () => onSelectElement?.(el.id);
         const handleDragEnd = (e) => {
           if (!onMoveElement) return;
-          const newX = (e.target.x() - position.x) / (baseScale * scale);
-          const newY = (e.target.y() - position.y) / (baseScale * scale);
+          const bs = baseScale * scale;
+          // Rect is positioned at top-left (sx - w/2, sy - h/2); recover center
+          const rawX = shape === 'circle'
+            ? (e.target.x() - position.x) / bs
+            : (e.target.x() + w / 2 - position.x) / bs;
+          const rawY = shape === 'circle'
+            ? (e.target.y() - position.y) / bs
+            : (e.target.y() + h / 2 - position.y) / bs;
+
+          const newX = snapToGridEnabled ? snapToGrid(rawX, 1) : rawX;
+          const newY = snapToGridEnabled ? snapToGrid(rawY, 1) : rawY;
+
+          // Collision check: element must stay within terrain polygon
+          if (terrainPoints.length >= 3) {
+            const inside = shape === 'circle'
+              ? isCircleInPolygon({ x: newX, y: newY, radius: el.radius || el.width / 2 }, terrainPoints, baseScale)
+              : isRectangleInPolygon({ x: newX - el.width / 2, y: newY - el.height / 2, width: el.width, height: el.height }, terrainPoints, baseScale);
+
+            if (!inside) {
+              // Reset Konva node to original position
+              e.target.position({
+                x: shape === 'circle' ? sx : sx - w / 2,
+                y: shape === 'circle' ? sy : sy - h / 2,
+              });
+              return;
+            }
+          }
+
           onMoveElement(el.id, newX, newY);
         };
 

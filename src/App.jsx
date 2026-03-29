@@ -7,6 +7,7 @@ import PlacedElementsLayer from './components/PlacedElementsLayer.jsx';
 import { calculateArea, calculatePerimeter } from './utils/geometryUtils.js';
 import { getElementDefinition } from './data/elementDefinitions.js';
 import { removeElement, duplicateElement } from './utils/elementUtils.js';
+import { isRectangleInPolygon, isCircleInPolygon } from './utils/collisionUtils.js';
 
 const baseScale = 10;
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -53,6 +54,15 @@ function App() {
   const handlePlaceElement = useCallback((x, y) => {
     const def = getElementDefinition(selectedElementType);
     if (!def) return;
+
+    // Check element fits inside terrain polygon (points are in layer pixels, elements in meters)
+    if (points.length >= 3) {
+      const inside = def.shape === 'circle'
+        ? isCircleInPolygon({ x, y, radius: def.defaultRadius ?? def.defaultWidth / 2 }, points, baseScale)
+        : isRectangleInPolygon({ x: x - def.defaultWidth / 2, y: y - def.defaultHeight / 2, width: def.defaultWidth, height: def.defaultHeight }, points, baseScale);
+      if (!inside) return;
+    }
+
     const newEl = {
       id: generateId(),
       definitionId: def.id,
