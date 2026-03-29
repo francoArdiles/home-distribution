@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Stage, Layer, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { calculateArea, calculatePerimeter, wouldCauseSelfIntersection } from '../utils/geometryUtils';
 import PlacedElementsLayer from './PlacedElementsLayer.jsx';
+import CardinalLayer from './CardinalLayer.jsx';
+import SolarPathLayer from './SolarPathLayer.jsx';
+import ShadowLayer from './ShadowLayer.jsx';
 
 const TerrainCanvas = ({
   onPointsChange, container, gridVisible = false, gridSize = 10,
@@ -9,6 +12,7 @@ const TerrainCanvas = ({
   activeElementType = null, onPlaceElement,
   placedElements = [], onSelectElement, onMoveElement, onResizeElement, onRotateElement,
   snapToGridEnabled = false,
+  solarVisible = false, solarConfig = null,
 }) => {
   const stageRef = useRef(null);
   const [points, setPoints] = useState([]); // array of {x, y} in layer coordinates (bottom-left origin)
@@ -588,6 +592,32 @@ const TerrainCanvas = ({
         onResizeElement={onResizeElement}
         onRotateElement={onRotateElement}
       />
+      {solarVisible && solarConfig && solarConfig.displayOptions.showShadows && (
+        <ShadowLayer
+          elements={placedElements}
+          solarConfig={solarConfig}
+          scale={scale}
+          position={position}
+          baseScale={baseScale}
+        />
+      )}
+      {solarVisible && solarConfig && solarConfig.displayOptions.showSolarPath && (
+        <SolarPathLayer
+          solarConfig={solarConfig}
+          width={stageWidth}
+          height={stageHeight}
+          scale={scale}
+          position={position}
+          baseScale={baseScale}
+        />
+      )}
+      {solarVisible && solarConfig && solarConfig.displayOptions.showCardinals && (
+        <CardinalLayer
+          width={stageWidth}
+          height={stageHeight}
+          northAtTop={solarConfig.displayOptions.northAtTop}
+        />
+      )}
     </Stage>
   );
 };

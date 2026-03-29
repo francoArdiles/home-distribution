@@ -8,6 +8,11 @@ import { calculateArea, calculatePerimeter } from './utils/geometryUtils.js';
 import { getElementDefinition } from './data/elementDefinitions.js';
 import { removeElement, duplicateElement } from './utils/elementUtils.js';
 import { isRectangleInPolygon, isCircleInPolygon } from './utils/collisionUtils.js';
+import { defaultSolarConfig, mergeSolarConfig } from './utils/solarConfigUtils.js';
+import SolarPanel from './components/SolarPanel.jsx';
+import CardinalLayer from './components/CardinalLayer.jsx';
+import SolarPathLayer from './components/SolarPathLayer.jsx';
+import ShadowLayer from './components/ShadowLayer.jsx';
 
 const baseScale = 10;
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -25,6 +30,15 @@ function App() {
   const [placedElements, setPlacedElements] = useState([]);
   const [selectedElementType, setSelectedElementType] = useState(null);
   const [selectedElementId, setSelectedElementId] = useState(null);
+
+  // Solar state
+  const [solarVisible, setSolarVisible] = useState(false);
+  const [solarPanelOpen, setSolarPanelOpen] = useState(false);
+  const [solarConfig, setSolarConfig] = useState(defaultSolarConfig);
+
+  const handleSolarConfigChange = useCallback((partial) => {
+    setSolarConfig(prev => mergeSolarConfig(prev, partial));
+  }, []);
 
   // --- Terrain handlers ---
   const handlePointsChange = useCallback((newPoints) => {
@@ -107,6 +121,16 @@ function App() {
     );
   }, []);
 
+  // Keyboard shortcut: S = toggle solar overlay
+  useEffect(() => {
+    const handler = (e) => {
+      if (!finished) return;
+      if (e.key === 's' || e.key === 'S') setSolarVisible(prev => !prev);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [finished]);
+
   // Delete + Duplicate keyboard shortcuts (only when terrain finished)
   useEffect(() => {
     const handler = (e) => {
@@ -138,6 +162,8 @@ function App() {
         onFinish={handleFinish}
         onToggleGrid={handleToggleGrid}
         onClear={handleClear}
+        solarVisible={solarVisible}
+        onToggleSolar={() => { setSolarVisible(v => !v); setSolarPanelOpen(v => !v); }}
       />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {finished && (
@@ -162,6 +188,8 @@ function App() {
             onResizeElement={handleResizeElement}
             onRotateElement={handleRotateElement}
             snapToGridEnabled={gridVisible}
+            solarVisible={solarVisible}
+            solarConfig={solarConfig}
           />
         </div>
         <InfoPanel
@@ -172,6 +200,15 @@ function App() {
           baseScale={baseScale}
         />
       </div>
+      {solarPanelOpen && (
+        <div style={{ position: 'fixed', top: 60, right: 16, zIndex: 100 }}>
+          <SolarPanel
+            solarConfig={solarConfig}
+            onConfigChange={handleSolarConfigChange}
+            onClose={() => setSolarPanelOpen(false)}
+          />
+        </div>
+      )}
       {cursorPos && !finished && (
         <div style={{ padding: '4px 8px', background: '#eee', fontSize: '12px' }}>
           X: {cursorPos.x.toFixed(1)} m, Y: {cursorPos.y.toFixed(1)} m

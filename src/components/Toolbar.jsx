@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, onClear }) => {
+const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, onClear, solarVisible, onToggleSolar }) => {
   const canFinish = pointsCount >= 3 && !finished;
 
   return (
@@ -11,6 +11,11 @@ const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, o
       <button onClick={onToggleGrid}>
         {gridVisible ? 'Ocultar cuadrícula' : 'Mostrar cuadrícula'}
       </button>
+      {finished && (
+        <button onClick={onToggleSolar}>
+          Solar
+        </button>
+      )}
       <button onClick={onClear}>
         Limpiar
       </button>
