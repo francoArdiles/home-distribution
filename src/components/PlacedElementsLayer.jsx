@@ -1,6 +1,7 @@
 import React from 'react';
 import { Layer, Rect, Circle, Text, Group } from 'react-konva';
 import { getElementDefinition } from '../data/elementDefinitions.js';
+import { calculateRectResize, calculateCircleResize, calculateRotation } from '../utils/elementUtils.js';
 
 const SELECTION_STROKE = '#0099FF';
 const SELECTION_STROKE_WIDTH = 3;
@@ -94,16 +95,23 @@ const PlacedElementsLayer = ({
               fill="#333"
             />
             {/* Resize handles */}
-            {resizeHandles.map(h => (
+            {resizeHandles.map(handle => (
               <Circle
-                key={h.key}
+                key={handle.key}
                 data-testid="resize-handle"
-                x={h.x} y={h.y}
+                x={handle.x} y={handle.y}
                 radius={HANDLE_R}
                 fill="white"
                 stroke="#0099FF"
                 strokeWidth={2}
                 draggable
+                onDragEnd={(e) => {
+                  if (!onResizeElement) return;
+                  const updates = shape === 'circle'
+                    ? calculateCircleResize(e.target.x(), e.target.y(), el, scale, position, baseScale)
+                    : calculateRectResize(handle.key, e.target.x(), e.target.y(), el, scale, position, baseScale);
+                  onResizeElement(el.id, updates);
+                }}
               />
             ))}
             {/* Rotation handle */}
@@ -116,6 +124,11 @@ const PlacedElementsLayer = ({
                 stroke="#FFA500"
                 strokeWidth={2}
                 draggable
+                onDragEnd={(e) => {
+                  if (!onRotateElement) return;
+                  const angle = calculateRotation(e.target.x(), e.target.y(), sx, sy);
+                  onRotateElement(el.id, angle);
+                }}
               />
             )}
           </Group>

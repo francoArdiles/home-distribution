@@ -1,8 +1,12 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { vi, describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import PlacedElementsLayer from '../PlacedElementsLayer.jsx';
+
+// Module-level object — Circle mock closes over this by reference, so it works
+// even though vi.mock is hoisted (the Circle function body runs at render time)
+const captured = { resizeHandlers: [], rotateHandler: null };
 
 vi.mock('react-konva', () => {
   const Stage = React.forwardRef(({ children, ...props }, ref) => {
@@ -22,16 +26,21 @@ vi.mock('react-konva', () => {
         {...props}
       />
     ),
-    Circle: ({ x, y, radius, fill, stroke, strokeWidth, draggable, onClick, onDragEnd, ...props }) => (
-      <div
-        data-testid="konva-circle-element"
-        data-x={x} data-y={y} data-radius={radius}
-        data-fill={fill} data-stroke={stroke}
-        data-draggable={String(draggable)}
-        onClick={onClick}
-        {...props}
-      />
-    ),
+    Circle: ({ x, y, radius, fill, stroke, strokeWidth, draggable, onClick, onDragEnd, rotation, ...props }) => {
+      const testId = props['data-testid'] || 'konva-circle-element';
+      if (testId === 'resize-handle' && onDragEnd) captured.resizeHandlers.push(onDragEnd);
+      if (testId === 'rotation-handle' && onDragEnd) captured.rotateHandler = onDragEnd;
+      return (
+        <div
+          data-testid="konva-circle-element"
+          data-x={x} data-y={y} data-radius={radius}
+          data-fill={fill} data-stroke={stroke}
+          data-draggable={String(draggable)}
+          onClick={onClick}
+          {...props}
+        />
+      );
+    },
     Text: ({ text, ...props }) => <span data-testid="konva-text" {...props}>{text}</span>,
     Line: () => <div data-testid="konva-line" />,
     Label: ({ children, ...props }) => <div data-testid="konva-label" {...props}>{children}</div>,
@@ -49,6 +58,7 @@ const baseProps = {
   onResizeElement: vi.fn(),
   onRotateElement: vi.fn(),
 };
+
 
 const rectElement = {
   id: 'el-1',
@@ -83,6 +93,10 @@ describe('PlacedElementsLayer', () => {
   beforeEach(() => {
     baseProps.onSelectElement = vi.fn();
     baseProps.onMoveElement = vi.fn();
+    baseProps.onResizeElement = vi.fn();
+    baseProps.onRotateElement = vi.fn();
+    captured.resizeHandlers = [];
+    captured.rotateHandler = null;
   });
 
   test('renders correct number of elements', () => {
@@ -170,6 +184,12 @@ describe('Resize handles (F2-U7)', () => {
 });
 
 describe('Rotation handle (F2-U8)', () => {
+  beforeEach(() => {
+    captured.resizeHandlers = [];
+    captured.rotateHandler = null;
+    baseProps.onRotateElement = vi.fn();
+  });
+
   test('selected element shows rotation handle', () => {
     const selected = { ...rectElement, isSelected: true };
     const { getByTestId } = render(
@@ -183,5 +203,58 @@ describe('Rotation handle (F2-U8)', () => {
       <PlacedElementsLayer {...baseProps} elements={[rectElement]} />
     );
     expect(queryByTestId('rotation-handle')).toBeNull();
+  });
+
+  test('dragging rotation handle calls onRotateElement with angle', () => {
+    const selected = { ...rectElement, isSelected: true };
+    render(<PlacedElementsLayer {...baseProps} elements={[selected]} />);
+
+    expect(captured.rotateHandler).toBeDefined();
+    // element center at sx=50, sy=50; drag handle to the right → ~90°
+    captured.rotateHandler({ target: { x: () => 70, y: () => 50 } });
+    expect(baseProps.onRotateElement).toHaveBeenCalledWith(rectElement.id, expect.any(Number));
+    const angle = baseProps.onRotateElement.mock.calls[0][1];
+    expect(angle).toBeCloseTo(90, 0);
+  });
+});
+
+describe('Resize drag (F2-U7 functional)', () => {
+  beforeEach(() => {
+    captured.resizeHandlers = [];
+    captured.rotateHandler = null;
+    baseProps.onResizeElement = vi.fn();
+  });
+
+  test('dragging br resize handle calls onResizeElement with new dimensions', () => {
+    // rectElement: x=5,y=5, w=10,h=8, scale=1, baseScale=10 → sx=50,sy=50, br at (100,90)
+    const selected = { ...rectElement, isSelected: true };
+    render(<PlacedElementsLayer {...baseProps} elements={[selected]} />);
+
+    // 4 handles: tl=0, tr=1, br=2, bl=3
+    expect(captured.resizeHandlers.length).toBe(4);
+    const brHandler = captured.resizeHandlers[2];
+    // drag to (120,110): expected w=12, h=10
+    brHandler({ target: { x: () => 120, y: () => 110 } });
+    expect(baseProps.onResizeElement).toHaveBeenCalledWith(rectElement.id, expect.objectContaining({
+      width: expect.any(Number),
+      height: expect.any(Number),
+    }));
+    const updates = baseProps.onResizeElement.mock.calls[0][1];
+    expect(updates.width).toBeCloseTo(12);
+    expect(updates.height).toBeCloseTo(10);
+  });
+
+  test('dragging circle resize handle calls onResizeElement with new radius', () => {
+    const selected = { ...circleElement, isSelected: true };
+    render(<PlacedElementsLayer {...baseProps} elements={[selected]} />);
+
+    expect(captured.resizeHandlers.length).toBe(1);
+    // circle center at sx=30,sy=30; drag to (60,30) → dist=30px → radius=3m
+    captured.resizeHandlers[0]({ target: { x: () => 60, y: () => 30 } });
+    expect(baseProps.onResizeElement).toHaveBeenCalledWith(circleElement.id, expect.objectContaining({
+      radius: expect.any(Number),
+    }));
+    const updates = baseProps.onResizeElement.mock.calls[0][1];
+    expect(updates.radius).toBeCloseTo(3);
   });
 });

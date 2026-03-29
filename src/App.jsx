@@ -85,9 +85,9 @@ function App() {
     );
   }, []);
 
-  const handleResizeElement = useCallback((id, width, height) => {
+  const handleResizeElement = useCallback((id, updates) => {
     setPlacedElements(prev =>
-      prev.map(el => el.id === id ? { ...el, width, height } : el)
+      prev.map(el => el.id === id ? { ...el, ...updates } : el)
     );
   }, []);
 
