@@ -65,16 +65,17 @@ const baseProps = {
 
 const rectElement = {
   id: 'el-1',
-  definitionId: 'casa',
+  definitionId: 'taller',
+  shape: 'rectangle',
   x: 5, y: 5,
-  width: 10, height: 8,
+  width: 5, height: 4,
   radius: 0,
   rotation: 0,
-  label: 'Casa',
+  label: 'Taller',
   isSelected: false,
-  color: '#E8D5B7',
-  borderColor: '#8B6914',
-  borderWidth: 2,
+  color: '#808080',
+  borderColor: '#696969',
+  borderWidth: 1,
 };
 
 const circleElement = {
@@ -149,7 +150,7 @@ describe('PlacedElementsLayer', () => {
     const { getByText } = render(
       <PlacedElementsLayer {...baseProps} elements={[rectElement]} />
     );
-    expect(getByText('Casa')).toBeInTheDocument();
+    expect(getByText('Taller')).toBeInTheDocument();
   });
 
   test('renders nothing when elements array is empty', () => {
@@ -237,15 +238,15 @@ describe('F2-U10: Snap to grid on drag', () => {
     // rectElement: x=5,y=5 (center meters), w=10,h=8. Rect rendered at sx-w/2=0,sy-h/2=10
     render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} snapToGridEnabled={true} terrainPoints={squareTerrain} />);
     expect(captured.moveHandler).toBeDefined();
-    // drag rect top-left to (23, 37) → center = (23+50, 37+40) = (73,77) → 7.3m, 7.7m → snapped to 7m, 8m
-    captured.moveHandler({ target: { x: () => 23, y: () => 37, position: vi.fn() } });
+    // drag rect center to (73, 77) → 7.3m, 7.7m → snapped to 7m, 8m
+    captured.moveHandler({ target: { x: () => 73, y: () => 77, position: vi.fn() } });
     expect(baseProps.onMoveElement).toHaveBeenCalledWith(rectElement.id, 7, 8);
   });
 
   test('without snapToGridEnabled, position is exact', () => {
     render(<PlacedElementsLayer {...baseProps} elements={[rectElement]} snapToGridEnabled={false} terrainPoints={squareTerrain} />);
-    // drag rect top-left to (23, 37) → center = (73, 77) → 7.3m, 7.7m
-    captured.moveHandler({ target: { x: () => 23, y: () => 37, position: vi.fn() } });
+    // drag rect center to (73, 77) → 7.3m, 7.7m
+    captured.moveHandler({ target: { x: () => 73, y: () => 77, position: vi.fn() } });
     expect(baseProps.onMoveElement).toHaveBeenCalledWith(rectElement.id, 7.3, 7.7);
   });
 
@@ -308,22 +309,23 @@ describe('Resize drag (F2-U7 functional)', () => {
   });
 
   test('dragging br resize handle calls onResizeElement with new dimensions', () => {
-    // rectElement: x=5,y=5, w=10,h=8, scale=1, baseScale=10 → sx=50,sy=50, br at (100,90)
+    // rectElement: x=5,y=5, w=5,h=4, scale=1, baseScale=10 → sx=50,sy=50
+    // tl anchor at (25,30), br at (75,70)
     const selected = { ...rectElement, isSelected: true };
     render(<PlacedElementsLayer {...baseProps} elements={[selected]} />);
 
     // 4 handles: tl=0, tr=1, br=2, bl=3
     expect(captured.resizeHandlers.length).toBe(4);
     const brHandler = captured.resizeHandlers[2];
-    // drag to (120,110): expected w=12, h=10
-    brHandler({ target: { x: () => 120, y: () => 110 } });
+    // drag br to (95,80): new w=(95-25)/10=7, h=(80-30)/10=5
+    brHandler({ target: { x: () => 95, y: () => 80 } });
     expect(baseProps.onResizeElement).toHaveBeenCalledWith(rectElement.id, expect.objectContaining({
       width: expect.any(Number),
       height: expect.any(Number),
     }));
     const updates = baseProps.onResizeElement.mock.calls[0][1];
-    expect(updates.width).toBeCloseTo(12);
-    expect(updates.height).toBeCloseTo(10);
+    expect(updates.width).toBeCloseTo(7);
+    expect(updates.height).toBeCloseTo(5);
   });
 
   test('dragging circle resize handle calls onResizeElement with new radius', () => {

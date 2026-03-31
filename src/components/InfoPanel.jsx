@@ -2,7 +2,7 @@ import React from 'react';
 
 const InfoPanel = ({ points, finished, area, perimeter, baseScale }) => {
   return (
-    <div style={{ padding: '8px', background: '#fff', border: '1px solid #ccc', minWidth: '200px' }}>
+    <div style={{ padding: '8px', background: '#fff', border: '1px solid #ccc', minWidth: '240px' }}>
       <div><strong>Área:</strong> {area.toFixed(1)} m²</div>
       <div><strong>Perímetro:</strong> {perimeter.toFixed(1)} m</div>
       <div>{finished ? 'Polígono cerrado' : 'Polígono abierto'}</div>

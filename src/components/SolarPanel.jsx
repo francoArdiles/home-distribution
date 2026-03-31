@@ -20,14 +20,20 @@ const SolarPanel = ({ solarConfig, onConfigChange, onClose }) => {
     onConfigChange(mergeSolarConfig(solarConfig, { dateTime }));
   };
 
+   const stopPropagation = (e) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div style={{ padding: 16, background: '#fff', border: '1px solid #ccc', minWidth: 280 }}>
+    <div style={{ padding: 16, background: '#fff', minWidth: 280 }} onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
       <h3 style={{ margin: '0 0 12px' }}>Configuración Solar</h3>
 
-      <LocationSelector location={solarConfig.location} onChange={handleLocationChange} />
-      <TimeSelector dateTime={solarConfig.dateTime} onChange={handleTimeChange} />
+      <div onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
+        <LocationSelector location={solarConfig.location} onChange={handleLocationChange} />
+        <TimeSelector dateTime={solarConfig.dateTime} onChange={handleTimeChange} />
+      </div>
 
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 12 }} onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
         <label>
           <input
             type="checkbox"

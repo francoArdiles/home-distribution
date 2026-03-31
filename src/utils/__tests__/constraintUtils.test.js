@@ -80,6 +80,38 @@ describe('validateConstraint', () => {
   });
 });
 
+describe('validateConstraint — targetId any', () => {
+  test('any: all others farther than min → valid', () => {
+    const c = { id: 'c-any', name: 'test', type: 'min-distance', sourceId: 'a', targetId: 'any', value: 5, enabled: true };
+    // elA at x=5, elB at x=15 → gap=8m ≥ 5m
+    const result = validateConstraint(c, [elA, elB], squareTerrain, baseScale);
+    expect(result.valid).toBe(true);
+    expect(result.actualDistance).toBeCloseTo(8);
+  });
+
+  test('any: closest element is too near → invalid', () => {
+    const c = { id: 'c-any', name: 'test', type: 'min-distance', sourceId: 'a', targetId: 'any', value: 5, enabled: true };
+    // elA at x=5, elClose at x=6 → touching/0m < 5m
+    const result = validateConstraint(c, [elA, elClose], squareTerrain, baseScale);
+    expect(result.valid).toBe(false);
+  });
+
+  test('any: no other elements → valid (distance=Infinity)', () => {
+    const c = { id: 'c-any', name: 'test', type: 'min-distance', sourceId: 'a', targetId: 'any', value: 5, enabled: true };
+    const result = validateConstraint(c, [elA], squareTerrain, baseScale);
+    expect(result.valid).toBe(true);
+    expect(result.actualDistance).toBe(Infinity);
+  });
+
+  test('any: uses minimum distance across multiple elements', () => {
+    const c = { id: 'c-any', name: 'test', type: 'min-distance', sourceId: 'a', targetId: 'any', value: 5, enabled: true };
+    // elA, elB (8m away), elClose (0m away) → min = 0m → invalid
+    const result = validateConstraint(c, [elA, elB, elClose], squareTerrain, baseScale);
+    expect(result.valid).toBe(false);
+    expect(result.actualDistance).toBeCloseTo(0);
+  });
+});
+
 describe('validateAllConstraints', () => {
   test('returns result for each enabled constraint', () => {
     const constraints = [

@@ -9,8 +9,12 @@ const MeasurementToolkit = ({
   onToggleMeasurements,
   onToggleConstraints,
 }) => {
+  const stopPropagation = (e) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div>
+    <div onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
       <h3>Medidas</h3>
       <div>
         <button

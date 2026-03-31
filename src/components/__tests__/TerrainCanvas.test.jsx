@@ -63,7 +63,7 @@ vi.mock('react-konva', () => {
         {...props}
       />
     ),
-    Circle: ({ x, y, radius, fill, stroke, strokeWidth, draggable, onDragStart, onDragEnd, onMouseEnter, onMouseLeave, ...props }) => (
+    Circle: ({ x, y, radius, fill, stroke, strokeWidth, draggable, onDragStart, onDragEnd, onDragMove, onMouseEnter, onMouseLeave, ...props }) => (
       <div
         data-testid="konva-circle"
         data-x={x}
@@ -75,6 +75,9 @@ vi.mock('react-konva', () => {
         data-draggable={String(draggable)}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragMove={onDragMove}
         {...props}
       />
     ),
@@ -760,6 +763,39 @@ describe('TerrainCanvas', () => {
         fireEvent.mouseUp(stageDiv, { clientX: 100, clientY: 200, button: 0 });
       });
       expect(onPlaceElement).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Vertex position display while dragging', () => {
+    test('shows vertex coordinates label when dragging a vertex in terrainEditMode', () => {
+      const wrapper = render(
+        <TerrainCanvas
+          onPointsChange={onPointsChange}
+          container={container}
+          finished={true}
+          terrainEditMode={true}
+          initialPoints={[
+            { x: 100, y: 100 },
+            { x: 200, y: 100 },
+            { x: 200, y: 200 }
+          ]}
+        />
+      );
+
+      // Trigger drag on the first circle using native drag events
+      const circles = wrapper.getAllByTestId('konva-circle');
+      expect(circles.length).toBe(3);
+      
+      act(() => {
+        fireEvent(circles[0], new MouseEvent('dragstart', { bubbles: true }));
+        fireEvent(circles[0], new MouseEvent('drag', { bubbles: true, clientX: 150, clientY: 150 }));
+      });
+
+      // Should show vertex position label
+      const labels = wrapper.getAllByTestId('konva-label');
+      expect(labels.length).toBeGreaterThan(0);
+      const labelTexts = wrapper.getAllByTestId('konva-label-text');
+      expect(labelTexts.some(l => l.textContent.includes('x:') && l.textContent.includes('y:'))).toBe(true);
     });
   });
 });

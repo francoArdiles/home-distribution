@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { removeElement, duplicateElement, calculateRectResize, calculateCircleResize, calculateRotation } from '../elementUtils.js';
+import { removeElement, duplicateElement, calculateRectResize, calculateCircleResize, calculateRotation, rotatePoint } from '../elementUtils.js';
 
 const el1 = { id: 'a', x: 5, y: 5, width: 3, height: 2, rotation: 0, label: 'Casa', isSelected: false };
 const el2 = { id: 'b', x: 10, y: 10, width: 2, height: 2, rotation: 0, label: 'Huerto', isSelected: false };
@@ -136,5 +136,38 @@ describe('calculateRotation', () => {
       expect(result).toBeGreaterThanOrEqual(0);
       expect(result).toBeLessThan(360);
     });
+  });
+});
+
+describe('rotatePoint', () => {
+  test('rotating 0° returns same point', () => {
+    const r = rotatePoint(10, 5, 0, 0, 0);
+    expect(r.x).toBeCloseTo(10);
+    expect(r.y).toBeCloseTo(5);
+  });
+
+  test('rotating 90° around origin: (1,0) → (0,1)', () => {
+    const r = rotatePoint(1, 0, 0, 0, 90);
+    expect(r.x).toBeCloseTo(0);
+    expect(r.y).toBeCloseTo(1);
+  });
+
+  test('rotating 180° around origin inverts both axes', () => {
+    const r = rotatePoint(3, 4, 0, 0, 180);
+    expect(r.x).toBeCloseTo(-3);
+    expect(r.y).toBeCloseTo(-4);
+  });
+
+  test('rotating around a non-origin center', () => {
+    // (6, 5) rotated 90° around (5, 5) → (5, 6)
+    const r = rotatePoint(6, 5, 5, 5, 90);
+    expect(r.x).toBeCloseTo(5);
+    expect(r.y).toBeCloseTo(6);
+  });
+
+  test('rotating -90° is inverse of 90°', () => {
+    const r = rotatePoint(0, 1, 0, 0, -90);
+    expect(r.x).toBeCloseTo(1);
+    expect(r.y).toBeCloseTo(0);
   });
 });

@@ -1,18 +1,18 @@
 import React from 'react';
 
 export const PRESET_CITIES = [
-  { name: 'Madrid',            latitude: 40.4168,  longitude: -3.7038  },
-  { name: 'Buenos Aires',      latitude: -34.6037, longitude: -58.3816 },
-  { name: 'Ciudad de México',  latitude: 19.4326,  longitude: -99.1332 },
-  { name: 'Santiago de Chile', latitude: -33.4489, longitude: -70.6693 },
-  { name: 'Bogotá',            latitude: 4.7110,   longitude: -74.0721 },
-  { name: 'Lima',              latitude: -12.0464, longitude: -77.0428 },
+  { name: 'Madrid',            latitude: 40.4168,  longitude: -3.7038,  utcOffset: 1  },
+  { name: 'Buenos Aires',      latitude: -34.6037, longitude: -58.3816, utcOffset: -3 },
+  { name: 'Ciudad de México',  latitude: 19.4326,  longitude: -99.1332, utcOffset: -6 },
+  { name: 'Santiago de Chile', latitude: -33.4489, longitude: -70.6693, utcOffset: -4 },
+  { name: 'Bogotá',            latitude: 4.7110,   longitude: -74.0721, utcOffset: -5 },
+  { name: 'Lima',              latitude: -12.0464, longitude: -77.0428, utcOffset: -5 },
 ];
 
 const LocationSelector = ({ location, onChange }) => {
   const handleCityChange = (e) => {
     const city = PRESET_CITIES.find(c => c.name === e.target.value);
-    if (city) onChange({ latitude: city.latitude, longitude: city.longitude, cityName: city.name });
+    if (city) onChange({ latitude: city.latitude, longitude: city.longitude, cityName: city.name, utcOffset: city.utcOffset });
   };
 
   const handleLatChange = (e) => {
@@ -25,6 +25,12 @@ const LocationSelector = ({ location, onChange }) => {
     const lon = parseFloat(e.target.value);
     if (isNaN(lon) || lon < -180 || lon > 180) return;
     onChange({ ...location, longitude: lon, cityName: 'Custom' });
+  };
+
+  const handleUtcOffsetChange = (e) => {
+    const offset = parseInt(e.target.value, 10);
+    if (isNaN(offset) || offset < -12 || offset > 14) return;
+    onChange({ ...location, utcOffset: offset, cityName: 'Custom' });
   };
 
   return (
@@ -55,6 +61,16 @@ const LocationSelector = ({ location, onChange }) => {
           min="-180" max="180" step="0.0001"
           value={location.longitude}
           onChange={handleLonChange}
+        />
+      </div>
+      <div>
+        <label htmlFor="utcoffset-input">Huso horario (UTC)</label>
+        <input
+          id="utcoffset-input"
+          type="number"
+          min="-12" max="14" step="1"
+          value={location.utcOffset ?? 0}
+          onChange={handleUtcOffsetChange}
         />
       </div>
     </div>

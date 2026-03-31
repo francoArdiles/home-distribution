@@ -8,8 +8,9 @@ const ShadowLayer = ({ elements = [], solarConfig, scale, position, baseScale })
 
   if (!displayOptions.showShadows) return <Layer />;
 
+  const utcOffset = location.utcOffset ?? 0;
   const currentDate = new Date(
-    Date.UTC(dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute)
+    Date.UTC(dateTime.year, dateTime.month, dateTime.day, dateTime.hour - utcOffset, dateTime.minute)
   );
   const { azimuth, elevation } = getSolarPosition(currentDate, location.latitude, location.longitude);
 

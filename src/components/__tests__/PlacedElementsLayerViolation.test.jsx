@@ -39,16 +39,17 @@ const baseProps = {
 
 const rectElement = {
   id: 'el-1',
-  definitionId: 'casa',
+  definitionId: 'taller',
+  shape: 'rectangle',
   x: 5, y: 5,
-  width: 10, height: 8,
+  width: 5, height: 4,
   radius: 0,
   rotation: 0,
-  label: 'Casa',
+  label: 'Taller',
   isSelected: false,
-  color: '#E8D5B7',
-  borderColor: '#8B6914',
-  borderWidth: 2,
+  color: '#808080',
+  borderColor: '#696969',
+  borderWidth: 1,
 };
 
 describe('F4-U9: violatingIds prop in PlacedElementsLayer', () => {

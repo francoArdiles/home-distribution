@@ -11,6 +11,11 @@ export const validateConstraint = (constraint, elements, terrainPoints, baseScal
   let actualDistance;
   if (constraint.targetId === 'terrain') {
     actualDistance = distanceElementToTerrain(source, terrainPoints, baseScale);
+  } else if (constraint.targetId === 'any') {
+    // Minimum distance from source to ALL other elements
+    const others = elements.filter(e => e.id !== constraint.sourceId);
+    if (others.length === 0) return { valid: true, actualDistance: Infinity, requiredDistance: constraint.value };
+    actualDistance = Math.min(...others.map(other => distanceElementToElement(source, other)));
   } else {
     const target = elements.find(e => e.id === constraint.targetId);
     if (!target) return { valid: true, actualDistance: Infinity, requiredDistance: constraint.value };

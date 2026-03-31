@@ -2,8 +2,21 @@ import React from 'react';
 import { Layer, Circle, Line } from 'react-konva';
 import { getSolarPosition, getSolarPathForDay } from '../utils/solarUtils.js';
 
-// Arc radius in meters — scales with zoom
-const ARC_RADIUS_METERS = 25;
+// Minimum arc radius in meters when no terrain is defined
+const MIN_ARC_RADIUS_METERS = 25;
+
+/**
+ * Compute the terrain bounding radius in meters (centroid → farthest vertex).
+ * Returns MIN_ARC_RADIUS_METERS when there are fewer than 3 points.
+ */
+const terrainBoundingRadiusMeters = (terrainPoints, baseScale) => {
+  if (!terrainPoints || terrainPoints.length < 3) return MIN_ARC_RADIUS_METERS;
+  const cx = terrainPoints.reduce((s, p) => s + p.x, 0) / terrainPoints.length;
+  const cy = terrainPoints.reduce((s, p) => s + p.y, 0) / terrainPoints.length;
+  const maxDist = Math.max(...terrainPoints.map(p => Math.hypot(p.x - cx, p.y - cy)));
+  const radiusM = maxDist / baseScale;
+  return Math.max(MIN_ARC_RADIUS_METERS, radiusM * 1.3); // 30% margin beyond terrain edge
+};
 
 /**
  * Compute the terrain centroid (stage pixel coords) from layer-pixel polygon points.
@@ -50,17 +63,20 @@ const SolarPathLayer = ({
   // Reference point: terrain centroid in stage pixels
   const center = computeCenter(terrainPoints, scale, position, width, height);
 
-  // Arc radius scales with terrain zoom
-  const pathRadius = ARC_RADIUS_METERS * baseScale * scale;
+  // Arc radius adapts to terrain size, then scales with zoom
+  const arcRadiusMeters = terrainBoundingRadiusMeters(terrainPoints, baseScale);
+  const pathRadius = arcRadiusMeters * baseScale * scale;
 
-  // Solar path for the day
+  const utcOffset = location.utcOffset ?? 0;
+
+  // Solar path for the day — iterate local hours so labels show local time
   const dayDate = new Date(Date.UTC(dateTime.year, dateTime.month, dateTime.day, 12));
-  const hourlyPath = getSolarPathForDay(dayDate, location.latitude, location.longitude, 1);
+  const hourlyPath = getSolarPathForDay(dayDate, location.latitude, location.longitude, 1, utcOffset);
   const abovePath = hourlyPath.filter(e => e.aboveHorizon);
 
-  // Current sun position
+  // Current sun position — convert local hour to UTC before querying SunCalc
   const currentDate = new Date(
-    Date.UTC(dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute)
+    Date.UTC(dateTime.year, dateTime.month, dateTime.day, dateTime.hour - utcOffset, dateTime.minute)
   );
   const currentPos = getSolarPosition(currentDate, location.latitude, location.longitude);
   const currentStage = sunToStage(currentPos.azimuth, currentPos.elevation, center, pathRadius);

@@ -5,6 +5,7 @@ export const defaultSolarConfig = {
     latitude: 40.4168,
     longitude: -3.7038,
     cityName: 'Madrid',
+    utcOffset: 1,
   },
   dateTime: {
     year: now.getFullYear(),

@@ -55,6 +55,85 @@ export const isCircleInPolygon = (circle, polygon, baseScale) => {
 };
 
 /**
+ * Checks if a polygon element (with arbitrary position and rotation) is fully inside
+ * a terrain polygon.
+ * @param {Array<{x,y}>} defPoints - element polygon vertices in meters, relative to element center
+ * @param {number} cx  - element center x in meters
+ * @param {number} cy  - element center y in meters
+ * @param {number} rotDeg - rotation in degrees
+ * @param {Array<{x,y}>} terrainPolygon - terrain vertices in layer pixels
+ * @param {number} baseScale - pixels per meter
+ */
+export const isPolygonElementInPolygon = (defPoints, cx, cy, rotDeg, terrainPolygon, baseScale) => {
+  const rad = rotDeg * Math.PI / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return defPoints.every(pt => {
+    const rx = pt.x * cos - pt.y * sin;
+    const ry = pt.x * sin + pt.y * cos;
+    return isPointInPolygon(
+      { x: (cx + rx) * baseScale, y: (cy + ry) * baseScale },
+      terrainPolygon
+    );
+  });
+};
+
+/**
  * Snaps a value to the nearest multiple of gridSize.
  */
 export const snapToGrid = (value, gridSize) => Math.round(value / gridSize) * gridSize;
+
+/**
+ * Returns true if two axis-aligned rectangles overlap.
+ * Both rects: { x, y, width, height } where x,y is the CENTER in meters.
+ */
+export const doRectsOverlap = (a, b) => {
+  const ax1 = a.x - a.width / 2, ax2 = a.x + a.width / 2;
+  const ay1 = a.y - a.height / 2, ay2 = a.y + a.height / 2;
+  const bx1 = b.x - b.width / 2, bx2 = b.x + b.width / 2;
+  const by1 = b.y - b.height / 2, by2 = b.y + b.height / 2;
+  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+};
+
+/**
+ * Returns true if two circles overlap.
+ * Both circles: { x, y, radius } in meters.
+ */
+export const doCirclesOverlap = (a, b) => {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  return dist < (a.radius + b.radius);
+};
+
+/**
+ * Returns true if a rectangle and a circle overlap.
+ * rect: { x, y, width, height } — x,y is CENTER in meters.
+ * circle: { x, y, radius } in meters.
+ */
+export const doRectCircleOverlap = (rect, circle) => {
+  const nx = Math.abs(circle.x - rect.x);
+  const ny = Math.abs(circle.y - rect.y);
+  const hw = rect.width / 2;
+  const hh = rect.height / 2;
+  if (nx >= hw + circle.radius || ny >= hh + circle.radius) return false;
+  if (nx <= hw || ny <= hh) return true;
+  const cornerDx = nx - hw;
+  const cornerDy = ny - hh;
+  return cornerDx * cornerDx + cornerDy * cornerDy < circle.radius * circle.radius;
+};
+
+/**
+ * Returns true if two elements overlap (any combination of rect/circle).
+ * Elements must have { x, y, width, height, shape?, radius? } with x,y as CENTER in meters.
+ */
+export const doElementsOverlap = (a, b) => {
+  const aIsCircle = a.shape === 'circle' || !!a.radius;
+  const bIsCircle = b.shape === 'circle' || !!b.radius;
+  const ar = a.radius || a.width / 2;
+  const br = b.radius || b.width / 2;
+  if (aIsCircle && bIsCircle) return doCirclesOverlap({ ...a, radius: ar }, { ...b, radius: br });
+  if (aIsCircle) return doRectCircleOverlap(b, { ...a, radius: ar });
+  if (bIsCircle) return doRectCircleOverlap(a, { ...b, radius: br });
+  return doRectsOverlap(a, b);
+};

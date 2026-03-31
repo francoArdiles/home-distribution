@@ -11,8 +11,25 @@ export const duplicateElement = (element, offsetX = 1, offsetY = 1) => ({
 });
 
 /**
+ * Rotate a point around a center by angleDeg degrees.
+ */
+export const rotatePoint = (px, py, cx, cy, angleDeg) => {
+  const rad = angleDeg * Math.PI / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = px - cx;
+  const dy = py - cy;
+  return {
+    x: cx + dx * cos - dy * sin,
+    y: cy + dx * sin + dy * cos,
+  };
+};
+
+/**
  * Calculate new position + dimensions when a rectangle corner handle is dragged.
  * The opposite corner stays fixed as the anchor.
+ * Supports rotated elements: drag coords and handle positions are in the rotated
+ * stage frame; the calculation projects into the element's local (unrotated) frame.
  * @param {'tl'|'tr'|'br'|'bl'} cornerKey
  * @param {number} dragX - new handle X in stage pixels
  * @param {number} dragY - new handle Y in stage pixels
@@ -24,19 +41,26 @@ export const calculateRectResize = (cornerKey, dragX, dragY, el, scale, position
   const sy = el.y * bs + position.y;
   const hw = (el.width * bs) / 2;
   const hh = (el.height * bs) / 2;
+  const rot = el.rotation || 0;
 
-  // Opposite corner (the anchor that stays fixed)
-  const opposites = {
+  // Opposite corner in axis-aligned space, then rotated to match element rotation
+  const oppAxisAligned = {
     tl: { x: sx + hw, y: sy + hh },
     tr: { x: sx - hw, y: sy + hh },
     br: { x: sx - hw, y: sy - hh },
     bl: { x: sx + hw, y: sy - hh },
-  };
-  const opp = opposites[cornerKey];
-  const newCenterX = (dragX + opp.x) / 2;
-  const newCenterY = (dragY + opp.y) / 2;
-  const newW = Math.max(0.5, Math.abs(dragX - opp.x) / bs);
-  const newH = Math.max(0.5, Math.abs(dragY - opp.y) / bs);
+  }[cornerKey];
+  const opp = rot !== 0 ? rotatePoint(oppAxisAligned.x, oppAxisAligned.y, sx, sy, rot) : oppAxisAligned;
+
+  // Project both drag point and opposite back into the element's unrotated local frame
+  const dragLocal = rot !== 0 ? rotatePoint(dragX, dragY, sx, sy, -rot) : { x: dragX, y: dragY };
+  const oppLocal = rot !== 0 ? rotatePoint(opp.x, opp.y, sx, sy, -rot) : opp;
+
+  const newCenterX = (dragLocal.x + oppLocal.x) / 2;
+  const newCenterY = (dragLocal.y + oppLocal.y) / 2;
+  const newW = Math.max(0.5, Math.abs(dragLocal.x - oppLocal.x) / bs);
+  const newH = Math.max(0.5, Math.abs(dragLocal.y - oppLocal.y) / bs);
+
   return {
     x: (newCenterX - position.x) / bs,
     y: (newCenterY - position.y) / bs,

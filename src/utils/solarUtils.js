@@ -32,17 +32,19 @@ export const getSolarPosition = (date, latitude, longitude) => {
  * @param {number} intervalHours - step in hours (default 1)
  * @returns {Array<{hour, azimuth, elevation, aboveHorizon}>}
  */
-export const getSolarPathForDay = (date, latitude, longitude, intervalHours = 1) => {
+export const getSolarPathForDay = (date, latitude, longitude, intervalHours = 1, utcOffset = 0) => {
   const result = [];
   const steps = Math.round(24 / intervalHours);
   for (let i = 0; i < steps; i++) {
-    const hour = i * intervalHours;
+    const localHour = i * intervalHours;
+    // Convert local hour to UTC: UTC = localHour - utcOffset
+    const utcHour = localHour - utcOffset;
     const d = new Date(
-      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), hour, 0, 0)
+      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), utcHour, 0, 0)
     );
     const pos = getSolarPosition(d, latitude, longitude);
     result.push({
-      hour,
+      hour: localHour, // label with local hour
       azimuth: pos.azimuth,
       elevation: pos.elevation,
       aboveHorizon: pos.elevation >= 0,
@@ -55,26 +57,24 @@ export const getSolarPathForDay = (date, latitude, longitude, intervalHours = 1)
  * Get sunrise time for a given date and location.
  * @returns {{ hour: number, minute: number } | null}
  */
-export const getSunrise = (date, latitude, longitude) => {
+export const getSunrise = (date, latitude, longitude, utcOffset = 0) => {
   const times = SunCalc.getTimes(date, latitude, longitude);
   if (!times.sunrise || isNaN(times.sunrise.getTime())) return null;
-  return {
-    hour: times.sunrise.getUTCHours(),
-    minute: times.sunrise.getUTCMinutes(),
-  };
+  const localHour = ((times.sunrise.getUTCHours() + utcOffset) % 24 + 24) % 24;
+  const localMinute = times.sunrise.getUTCMinutes();
+  return { hour: localHour, minute: localMinute };
 };
 
 /**
  * Get sunset time for a given date and location.
  * @returns {{ hour: number, minute: number } | null}
  */
-export const getSunset = (date, latitude, longitude) => {
+export const getSunset = (date, latitude, longitude, utcOffset = 0) => {
   const times = SunCalc.getTimes(date, latitude, longitude);
   if (!times.sunset || isNaN(times.sunset.getTime())) return null;
-  return {
-    hour: times.sunset.getUTCHours(),
-    minute: times.sunset.getUTCMinutes(),
-  };
+  const localHour = ((times.sunset.getUTCHours() + utcOffset) % 24 + 24) % 24;
+  const localMinute = times.sunset.getUTCMinutes();
+  return { hour: localHour, minute: localMinute };
 };
 
 /**

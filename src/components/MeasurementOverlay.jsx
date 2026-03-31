@@ -116,6 +116,29 @@ const MeasurementOverlay = ({
     }
   };
 
+  // Returns the stage-pixel point on an element's border in the direction of (towardX, towardY)
+  const borderPoint = (el, towardX, towardY) => {
+    const cx = el.x * baseScale * scale + position.x;
+    const cy = el.y * baseScale * scale + position.y;
+    const dx = towardX - cx;
+    const dy = towardY - cy;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return { x: cx, y: cy };
+    const nx = dx / len;
+    const ny = dy / len;
+    if (el.shape === 'circle' || el.radius) {
+      const r = (el.radius || el.width / 2) * baseScale * scale;
+      return { x: cx + nx * r, y: cy + ny * r };
+    }
+    // Rectangle (axis-aligned approximation for display)
+    const hw = (el.width / 2) * baseScale * scale;
+    const hh = (el.height / 2) * baseScale * scale;
+    const tx = nx !== 0 ? Math.abs(hw / nx) : Infinity;
+    const ty = ny !== 0 ? Math.abs(hh / ny) : Infinity;
+    const t = Math.min(tx, ty);
+    return { x: cx + nx * t, y: cy + ny * t };
+  };
+
   // Auto-distance calculations for selected element
   const selectedElement = selectedElementId ? elements.find(e => e.id === selectedElementId) : null;
 
@@ -161,15 +184,15 @@ const MeasurementOverlay = ({
       if (other.id === selectedElementId) return;
       const dist = distanceElementToElement(selectedElement, other);
       if (dist < 10) {
-        const x1 = selectedElement.x * baseScale * scale + position.x;
-        const y1 = selectedElement.y * baseScale * scale + position.y;
-        const x2 = other.x * baseScale * scale + position.x;
-        const y2 = other.y * baseScale * scale + position.y;
+        const c1 = { x: selectedElement.x * baseScale * scale + position.x, y: selectedElement.y * baseScale * scale + position.y };
+        const c2 = { x: other.x * baseScale * scale + position.x, y: other.y * baseScale * scale + position.y };
+        const p1 = borderPoint(selectedElement, c2.x, c2.y);
+        const p2 = borderPoint(other, c1.x, c1.y);
         lines.push(
           <Line
             key={`elem-dist-${other.id}`}
             data-testid="auto-distance-line"
-            points={[x1, y1, x2, y2]}
+            points={[p1.x, p1.y, p2.x, p2.y]}
             stroke={AUTO_COLOR}
             strokeWidth={1}
             dash={[4, 4]}
@@ -179,8 +202,8 @@ const MeasurementOverlay = ({
           <Text
             key={`elem-dist-label-${other.id}`}
             data-testid="auto-distance-label"
-            x={(x1 + x2) / 2 + 4}
-            y={(y1 + y2) / 2}
+            x={(p1.x + p2.x) / 2 + 4}
+            y={(p1.y + p2.y) / 2}
             text={`${dist.toFixed(2)}m`}
             fontSize={11}
             fill={AUTO_COLOR}
@@ -200,22 +223,22 @@ const MeasurementOverlay = ({
       const src = elements.find(e => e.id === constraint.sourceId);
       const tgt = elements.find(e => e.id === constraint.targetId);
       if (!src || !tgt) return null;
-      const x1 = src.x * baseScale * scale + position.x;
-      const y1 = src.y * baseScale * scale + position.y;
-      const x2 = tgt.x * baseScale * scale + position.x;
-      const y2 = tgt.y * baseScale * scale + position.y;
+      const c1 = { x: src.x * baseScale * scale + position.x, y: src.y * baseScale * scale + position.y };
+      const c2 = { x: tgt.x * baseScale * scale + position.x, y: tgt.y * baseScale * scale + position.y };
+      const p1 = borderPoint(src, c2.x, c2.y);
+      const p2 = borderPoint(tgt, c1.x, c1.y);
       return (
         <Group key={`violation-${idx}`}>
           <Line
             data-testid="violation-line"
-            points={[x1, y1, x2, y2]}
+            points={[p1.x, p1.y, p2.x, p2.y]}
             stroke={VIOLATION_COLOR}
             strokeWidth={2}
           />
           <Text
             data-testid="violation-label"
-            x={(x1 + x2) / 2 + 4}
-            y={(y1 + y2) / 2}
+            x={(p1.x + p2.x) / 2 + 4}
+            y={(p1.y + p2.y) / 2}
             text={`actual: ${actualDistance.toFixed(2)}m / mínimo: ${requiredDistance}m`}
             fontSize={11}
             fill={VIOLATION_COLOR}

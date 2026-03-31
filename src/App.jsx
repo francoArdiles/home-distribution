@@ -7,16 +7,18 @@ import PlacedElementsLayer from './components/PlacedElementsLayer.jsx';
 import { calculateArea, calculatePerimeter } from './utils/geometryUtils.js';
 import { getElementDefinition } from './data/elementDefinitions.js';
 import { removeElement, duplicateElement } from './utils/elementUtils.js';
-import { isRectangleInPolygon, isCircleInPolygon } from './utils/collisionUtils.js';
+import { isRectangleInPolygon, isCircleInPolygon, isPolygonElementInPolygon } from './utils/collisionUtils.js';
 import { defaultSolarConfig, mergeSolarConfig } from './utils/solarConfigUtils.js';
 import SolarPanel from './components/SolarPanel.jsx';
 import CardinalLayer from './components/CardinalLayer.jsx';
 import SolarPathLayer from './components/SolarPathLayer.jsx';
 import ShadowLayer from './components/ShadowLayer.jsx';
 import { defaultMeasurementConfig, addMeasurement, clearMeasurements, setActiveTool, addConstraint, removeConstraint, toggleConstraint } from './utils/measurementConfigUtils.js';
+import { downloadProject, openProjectFile, ProjectImportError } from './utils/projectIO.js';
 import { validateAllConstraints } from './utils/constraintUtils.js';
 import MeasurementToolkit from './components/MeasurementToolkit.jsx';
 import ConstraintPanel from './components/ConstraintPanel.jsx';
+import CustomElementModal from './components/CustomElementModal.jsx';
 
 const baseScale = 10;
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -32,8 +34,22 @@ function App() {
 
   // Elements state
   const [placedElements, setPlacedElements] = useState([]);
+  const [customDefinitions, setCustomDefinitions] = useState([]);
+  const [showCustomModal, setShowCustomModal] = useState(false);
   const [selectedElementType, setSelectedElementType] = useState(null);
   const [selectedElementId, setSelectedElementId] = useState(null);
+
+  // Canvas remount key — increment to force TerrainCanvas to reinitialize (e.g. after project load)
+  const [canvasKey, setCanvasKey] = useState(0);
+
+  // Terrain edit state
+  const [terrainEditMode, setTerrainEditMode] = useState(false);
+  const handleToggleTerrainEdit = useCallback(() => setTerrainEditMode(prev => !prev), []);
+
+  // Entrance state
+  const [entrance, setEntrance] = useState(null);
+  const [entranceMode, setEntranceMode] = useState(false);
+  const handleToggleEntrance = useCallback(() => setEntranceMode(prev => !prev), []);
 
   // Solar state
   const [solarVisible, setSolarVisible] = useState(false);
@@ -43,6 +59,41 @@ function App() {
   // Measurement state
   const [measurementConfig, setMeasurementConfig] = useState(defaultMeasurementConfig);
   const [measurementPanelOpen, setMeasurementPanelOpen] = useState(false);
+
+  // Floating panels drag state
+  const [solarPanelPos, setSolarPanelPos] = useState({ x: null, y: 60 });
+  const [measurementPanelPos, setMeasurementPanelPos] = useState({ x: 200, y: 60 });
+  const [draggingPanel, setDraggingPanel] = useState(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  const handleDragStart = useCallback((panelName, e) => {
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+    const pos = panelName === 'solar' ? solarPanelPos : measurementPanelPos;
+    const isPositioned = pos.x !== null;
+    setDragOffset({
+      x: clientX - (isPositioned ? pos.x : (panelName === 'solar' ? window.innerWidth - 300 : 200)),
+      y: clientY - (isPositioned ? pos.y : 60)
+    });
+    setDraggingPanel(panelName);
+  }, [solarPanelPos, measurementPanelPos]);
+
+  const handleDragMove = useCallback((e) => {
+    if (!draggingPanel) return;
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+    const newX = clientX - dragOffset.x;
+    const newY = Math.max(60, clientY - dragOffset.y);
+    if (draggingPanel === 'solar') {
+      setSolarPanelPos({ x: newX, y: newY });
+    } else {
+      setMeasurementPanelPos({ x: newX, y: newY });
+    }
+  }, [draggingPanel, dragOffset]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingPanel(null);
+  }, []);
 
   const handleSolarConfigChange = useCallback((partial) => {
     setSolarConfig(prev => mergeSolarConfig(prev, partial));
@@ -91,20 +142,66 @@ function App() {
     setPlacedElements([]);
     setSelectedElementId(null);
     setSelectedElementType(null);
+    setEntrance(null);
+    setEntranceMode(false);
   }, []);
 
   const handleToggleGrid = useCallback(() => setGridVisible(prev => !prev), []);
 
+  // --- Custom element handlers ---
+  const handleSaveCustomElement = useCallback((def) => {
+    setCustomDefinitions(prev => [...prev, def]);
+    setShowCustomModal(false);
+  }, []);
+
+  // --- Save / Open ---
+  const handleSave = useCallback(() => {
+    downloadProject({ points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions });
+  }, [points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions]);
+
+  const handleOpen = useCallback(async () => {
+    try {
+      const project = await openProjectFile();
+      // Restore terrain
+      setPoints(project.terrain.points);
+      setFinished(project.terrain.finished);
+      setEntrance(project.terrain.entrance ?? null);
+      setArea(0);
+      setPerimeter(0);
+      // Restore elements
+      setPlacedElements(project.elements);
+      setSelectedElementId(null);
+      setSelectedElementType(null);
+      // Restore optional configs
+      if (project.solar) setSolarConfig(project.solar);
+      if (project.measurements) setMeasurementConfig(project.measurements);
+      setCustomDefinitions(project.customDefinitions ?? []);
+      setCanvasKey(k => k + 1); // remount TerrainCanvas with loaded points
+    } catch (err) {
+      if (err instanceof ProjectImportError) {
+        alert(`No se pudo abrir el proyecto: ${err.message}`);
+      } else {
+        console.error(err);
+      }
+    }
+  }, []);
+
   // --- Element handlers ---
   const handlePlaceElement = useCallback((x, y) => {
-    const def = getElementDefinition(selectedElementType);
+    const def = getElementDefinition(selectedElementType)
+             ?? customDefinitions.find(d => d.id === selectedElementType);
     if (!def) return;
 
-    // Check element fits inside terrain polygon (points are in layer pixels, elements in meters)
+    // Check element fits inside terrain polygon
     if (points.length >= 3) {
-      const inside = def.shape === 'circle'
-        ? isCircleInPolygon({ x, y, radius: def.defaultRadius ?? def.defaultWidth / 2 }, points, baseScale)
-        : isRectangleInPolygon({ x: x - def.defaultWidth / 2, y: y - def.defaultHeight / 2, width: def.defaultWidth, height: def.defaultHeight }, points, baseScale);
+      let inside;
+      if (def.shape === 'circle') {
+        inside = isCircleInPolygon({ x, y, radius: def.defaultRadius ?? def.defaultWidth / 2 }, points, baseScale);
+      } else if (def.shape === 'polygon') {
+        inside = isPolygonElementInPolygon(def.points, x, y, 0, points, baseScale);
+      } else {
+        inside = isRectangleInPolygon({ x: x - def.defaultWidth / 2, y: y - def.defaultHeight / 2, width: def.defaultWidth, height: def.defaultHeight }, points, baseScale);
+      }
       if (!inside) return;
     }
 
@@ -189,8 +286,30 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [finished, selectedElementId, placedElements]);
 
+  // Floating panels drag events
+  useEffect(() => {
+    const onMouseMove = (e) => handleDragMove(e);
+    const onMouseUp = () => handleDragEnd();
+    const onTouchMove = (e) => handleDragMove(e);
+    const onTouchEnd = () => handleDragEnd();
+
+    if (draggingPanel) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('touchmove', onTouchMove);
+      window.addEventListener('touchend', onTouchEnd);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [draggingPanel, handleDragMove, handleDragEnd]);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <Toolbar
         pointsCount={points.length}
         finished={finished}
@@ -201,16 +320,27 @@ function App() {
         solarVisible={solarVisible}
         onToggleSolar={() => { setSolarVisible(v => !v); setSolarPanelOpen(v => !v); }}
         onToggleMeasurements={handleToggleMeasurements}
+        terrainEditMode={terrainEditMode}
+        onToggleTerrainEdit={handleToggleTerrainEdit}
+        entranceMode={entranceMode}
+        onToggleEntrance={handleToggleEntrance}
+        onSave={handleSave}
+        onOpen={handleOpen}
+        onCreateCustomElement={() => setShowCustomModal(true)}
       />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflowX: 'auto' }}>
         {finished && (
           <ElementLibraryPanel
             onSelectElement={setSelectedElementType}
             selectedElementType={selectedElementType}
+            customDefinitions={customDefinitions}
           />
         )}
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           <TerrainCanvas
+            key={canvasKey}
+            initialPoints={points}
+            initialFinished={finished}
             onPointsChange={handlePointsChange}
             finished={finished}
             onFinish={handleFinish}
@@ -225,12 +355,17 @@ function App() {
             onResizeElement={handleResizeElement}
             onRotateElement={handleRotateElement}
             snapToGridEnabled={gridVisible}
+            terrainEditMode={terrainEditMode}
+            entrance={entrance}
+            entranceMode={entranceMode}
+            onEntranceChange={setEntrance}
             solarVisible={solarVisible}
             solarConfig={solarConfig}
             measurementConfig={measurementConfig}
             onAddMeasurement={handleAddMeasurement}
             onSetActiveTool={handleSetActiveTool}
             selectedElementId={selectedElementId}
+            customDefinitions={customDefinitions}
           />
         </div>
         <InfoPanel
@@ -242,7 +377,20 @@ function App() {
         />
       </div>
       {solarPanelOpen && (
-        <div style={{ position: 'fixed', top: 60, right: 16, zIndex: 100 }}>
+        <div
+          style={{
+            position: 'fixed',
+            left: solarPanelPos.x ?? (window.innerWidth - 300),
+            top: solarPanelPos.y ?? 60,
+            zIndex: 100,
+            cursor: 'move',
+            background: '#fff',
+            border: '1px solid #ccc',
+            padding: 8,
+          }}
+          onMouseDown={(e) => handleDragStart('solar', e)}
+          onTouchStart={(e) => handleDragStart('solar', e)}
+        >
           <SolarPanel
             solarConfig={solarConfig}
             onConfigChange={handleSolarConfigChange}
@@ -251,7 +399,20 @@ function App() {
         </div>
       )}
       {measurementPanelOpen && finished && (
-        <div style={{ position: 'fixed', top: 60, left: 200, zIndex: 100 }}>
+        <div
+          style={{
+            position: 'fixed',
+            left: measurementPanelPos.x ?? 200,
+            top: measurementPanelPos.y ?? 60,
+            zIndex: 100,
+            cursor: 'move',
+            background: '#fff',
+            border: '1px solid #ccc',
+            padding: 8,
+          }}
+          onMouseDown={(e) => handleDragStart('measurement', e)}
+          onTouchStart={(e) => handleDragStart('measurement', e)}
+        >
           <MeasurementToolkit
             activeTool={measurementConfig.activeTool}
             onSelectTool={handleSetActiveTool}
@@ -275,6 +436,12 @@ function App() {
         <div style={{ padding: '4px 8px', background: '#eee', fontSize: '12px' }}>
           X: {cursorPos.x.toFixed(1)} m, Y: {cursorPos.y.toFixed(1)} m
         </div>
+      )}
+      {showCustomModal && (
+        <CustomElementModal
+          onSave={handleSaveCustomElement}
+          onCancel={() => setShowCustomModal(false)}
+        />
       )}
     </div>
   );
