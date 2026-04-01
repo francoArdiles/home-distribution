@@ -3,7 +3,7 @@ import LocationSelector from './LocationSelector.jsx';
 import TimeSelector from './TimeSelector.jsx';
 import { mergeSolarConfig } from '../utils/solarConfigUtils.js';
 
-const SolarPanel = ({ solarConfig, onConfigChange, onClose }) => {
+const SolarPanel = ({ solarConfig, onConfigChange }) => {
   const { displayOptions } = solarConfig;
 
   const toggle = (key) => {
@@ -20,58 +20,29 @@ const SolarPanel = ({ solarConfig, onConfigChange, onClose }) => {
     onConfigChange(mergeSolarConfig(solarConfig, { dateTime }));
   };
 
-   const stopPropagation = (e) => {
-    e.stopPropagation();
-  };
-
   return (
-    <div style={{ padding: 16, background: '#fff', minWidth: 280 }} onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
-      <h3 style={{ margin: '0 0 12px' }}>Configuración Solar</h3>
+    <div className="p-4 bg-white min-w-[280px] text-sm">
+      <LocationSelector location={solarConfig.location} onChange={handleLocationChange} />
+      <TimeSelector dateTime={solarConfig.dateTime} onChange={handleTimeChange} />
 
-      <div onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
-        <LocationSelector location={solarConfig.location} onChange={handleLocationChange} />
-        <TimeSelector dateTime={solarConfig.dateTime} onChange={handleTimeChange} />
+      <div className="mt-3 space-y-1.5">
+        {[
+          { key: 'showCardinals',  label: 'Mostrar cardinales' },
+          { key: 'showSolarPath',  label: 'Mostrar trayectoria solar' },
+          { key: 'showShadows',    label: 'Mostrar sombras' },
+          { key: 'northAtTop',     label: 'Norte arriba' },
+        ].map(({ key, label }) => (
+          <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={displayOptions[key]}
+              onChange={() => toggle(key)}
+              className="accent-blue-600"
+            />
+            {label}
+          </label>
+        ))}
       </div>
-
-      <div style={{ marginTop: 12 }} onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
-        <label>
-          <input
-            type="checkbox"
-            checked={displayOptions.showCardinals}
-            onChange={() => toggle('showCardinals')}
-          />
-          {' '}Mostrar cardinales
-        </label>
-        <br />
-        <label>
-          <input
-            type="checkbox"
-            checked={displayOptions.showSolarPath}
-            onChange={() => toggle('showSolarPath')}
-          />
-          {' '}Mostrar trayectoria solar
-        </label>
-        <br />
-        <label>
-          <input
-            type="checkbox"
-            checked={displayOptions.showShadows}
-            onChange={() => toggle('showShadows')}
-          />
-          {' '}Mostrar sombras
-        </label>
-        <br />
-        <label>
-          <input
-            type="checkbox"
-            checked={displayOptions.northAtTop}
-            onChange={() => toggle('northAtTop')}
-          />
-          {' '}Norte arriba
-        </label>
-      </div>
-
-      <button style={{ marginTop: 12 }} onClick={onClose}>Cerrar</button>
     </div>
   );
 };

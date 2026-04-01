@@ -4,21 +4,21 @@ import '@testing-library/jest-dom';
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 import MeasurementOverlay from '../MeasurementOverlay.jsx';
 
-// Capture handlers from the interactive Layer
-const capturedLayer = { onClick: null, onMouseMove: null, onDblClick: null };
+// Capture handlers from the Rect hitbox
+const capturedLayer = { onClick: null, onMouseMove: null };
 
 vi.mock('react-konva', () => ({
-  Layer: ({ children, onClick, onMouseMove, onDblClick, ...props }) => {
+  Layer: ({ children, ...props }) => (
+    <div data-testid={props['data-testid'] || undefined} {...props}>{children}</div>
+  ),
+  Rect: ({ onClick, onMouseMove, onTap, ...props }) => {
     if (onClick) {
       capturedLayer.onClick = onClick;
       capturedLayer.onMouseMove = onMouseMove;
-      capturedLayer.onDblClick = onDblClick;
     }
-    return (
-      <div onClick={onClick} onMouseMove={onMouseMove} onDoubleClick={onDblClick} {...props}>{children}</div>
-    );
+    return <div data-testid="measurement-hitbox" {...props} />;
   },
-  Line: ({ points, ...props }) => <div data-testid={props['data-testid'] || 'konva-line'} {...props} />,
+  Line: ({ points, closed, ...props }) => <div data-testid={props['data-testid'] || 'konva-line'} data-closed={closed ? 'true' : undefined} {...props} />,
   Circle: (props) => <div data-testid={props['data-testid'] || 'konva-circle'} {...props} />,
   Text: ({ text, ...props }) => <span data-testid={props['data-testid'] || 'konva-text'} {...props}>{text}</span>,
   Group: ({ children, ...props }) => <div data-testid={props['data-testid'] || 'konva-group'} {...props}>{children}</div>,
@@ -143,7 +143,7 @@ describe('F4-U6: MeasurementOverlay — area tool', () => {
     expect(getByTestId('measurement-layer')).toBeInTheDocument();
   });
 
-  test('area preview polygon appears after 2+ clicks', () => {
+  test('area preview polygon appears after 2+ clicks with mousemove', () => {
     const { getByTestId, queryByTestId } = render(
       <MeasurementOverlay {...baseProps} activeTool="area" />
     );
@@ -151,10 +151,11 @@ describe('F4-U6: MeasurementOverlay — area tool', () => {
     expect(queryByTestId('area-preview')).toBeNull();
     act(() => { clickAt(layer, 0, 0); });
     act(() => { clickAt(layer, 100, 0); });
+    // mousePoint needed for preview to show (clickAt already calls onMouseMove)
     expect(queryByTestId('area-preview')).toBeInTheDocument();
   });
 
-  test('double-click closes polygon and calls onAddMeasurement with type=area', () => {
+  test('Space key finishes polygon and calls onAddMeasurement with type=area', () => {
     const { getByTestId } = render(
       <MeasurementOverlay {...baseProps} activeTool="area" />
     );
@@ -162,11 +163,43 @@ describe('F4-U6: MeasurementOverlay — area tool', () => {
     act(() => { clickAt(layer, 0, 0); });
     act(() => { clickAt(layer, 100, 0); });
     act(() => { clickAt(layer, 100, 100); });
-    // Double click to close
-    act(() => { capturedLayer.onDblClick?.(makeKonvaEvent(100, 100)); });
+    act(() => { fireEvent.keyDown(window, { key: ' ' }); });
     expect(baseProps.onAddMeasurement).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'area', value: expect.any(Number) })
     );
+  });
+
+  test('Space with fewer than 3 vertices does not call onAddMeasurement', () => {
+    const { getByTestId } = render(<MeasurementOverlay {...baseProps} activeTool="area" />);
+    const layer = getByTestId('measurement-layer');
+    act(() => { clickAt(layer, 0, 0); });
+    act(() => { clickAt(layer, 100, 0); });
+    act(() => { fireEvent.keyDown(window, { key: ' ' }); });
+    expect(baseProps.onAddMeasurement).not.toHaveBeenCalled();
+  });
+
+  test('area value is correct for a 10×10m square (baseScale=10 → 100px×100px)', () => {
+    const { getByTestId } = render(
+      <MeasurementOverlay {...baseProps} activeTool="area" baseScale={10} />
+    );
+    const layer = getByTestId('measurement-layer');
+    act(() => { clickAt(layer, 0, 0); });
+    act(() => { clickAt(layer, 100, 0); });
+    act(() => { clickAt(layer, 100, 100); });
+    act(() => { clickAt(layer, 0, 100); });
+    act(() => { fireEvent.keyDown(window, { key: ' ' }); });
+    const call = baseProps.onAddMeasurement.mock.calls[0][0];
+    expect(call.value).toBeCloseTo(100, 1);
+  });
+
+  test('vertex dots are shown while drawing', () => {
+    const { getByTestId, getAllByTestId } = render(
+      <MeasurementOverlay {...baseProps} activeTool="area" />
+    );
+    const layer = getByTestId('measurement-layer');
+    act(() => { clickAt(layer, 0, 0); });
+    act(() => { clickAt(layer, 100, 0); });
+    expect(getAllByTestId('area-vertex').length).toBe(2);
   });
 
   test('saved area polygons are rendered', () => {

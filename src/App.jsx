@@ -13,7 +13,7 @@ import SolarPanel from './components/SolarPanel.jsx';
 import CardinalLayer from './components/CardinalLayer.jsx';
 import SolarPathLayer from './components/SolarPathLayer.jsx';
 import ShadowLayer from './components/ShadowLayer.jsx';
-import { defaultMeasurementConfig, addMeasurement, clearMeasurements, setActiveTool, addConstraint, removeConstraint, toggleConstraint } from './utils/measurementConfigUtils.js';
+import { defaultMeasurementConfig, addMeasurement, removeMeasurement, clearMeasurements, setActiveTool, addConstraint, removeConstraint, toggleConstraint } from './utils/measurementConfigUtils.js';
 import { downloadProject, openProjectFile, ProjectImportError } from './utils/projectIO.js';
 import { validateAllConstraints } from './utils/constraintUtils.js';
 import MeasurementToolkit from './components/MeasurementToolkit.jsx';
@@ -105,6 +105,9 @@ function App() {
   }, []);
   const handleClearMeasurements = useCallback(() => {
     setMeasurementConfig(prev => clearMeasurements(prev));
+  }, []);
+  const handleRemoveMeasurement = useCallback((id) => {
+    setMeasurementConfig(prev => removeMeasurement(prev, id));
   }, []);
   const handleSetActiveTool = useCallback((tool) => {
     setMeasurementConfig(prev => setActiveTool(prev, tool));
@@ -363,6 +366,7 @@ function App() {
             solarConfig={solarConfig}
             measurementConfig={measurementConfig}
             onAddMeasurement={handleAddMeasurement}
+            onRemoveMeasurement={handleRemoveMeasurement}
             onSetActiveTool={handleSetActiveTool}
             selectedElementId={selectedElementId}
             customDefinitions={customDefinitions}

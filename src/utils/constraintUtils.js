@@ -1,5 +1,62 @@
 import { distanceElementToElement, distanceElementToTerrain } from './distanceUtils.js';
 
+// ---------------------------------------------------------------------------
+// Display name helpers
+// ---------------------------------------------------------------------------
+
+const SOURCE_LABELS = {
+  any: 'Cualquier elemento',
+};
+
+const TARGET_LABELS = {
+  terrain: 'Límite del terreno',
+  any: 'Cualquier otro elemento',
+};
+
+/**
+ * Derives a human-readable display name for a constraint using the *current*
+ * element labels. Falls back to the stored `constraint.name` (or a generic
+ * string) when an element ID cannot be resolved — preserving backward
+ * compatibility with older project files.
+ *
+ * @param {object} constraint
+ * @param {Array<{id, label}>} elements
+ * @returns {string}
+ */
+export const getConstraintDisplayName = (constraint, elements) => {
+  const { sourceId, targetId, value, name } = constraint;
+
+  const srcEl = elements.find(e => e.id === sourceId);
+  const srcLabel = srcEl?.label ?? SOURCE_LABELS[sourceId];
+
+  // If source cannot be resolved, fall back to stored name
+  if (!srcLabel) return name || `Restricción (mín. ${value}m)`;
+
+  let tgtLabel;
+  if (TARGET_LABELS[targetId]) {
+    tgtLabel = TARGET_LABELS[targetId];
+  } else {
+    const tgtEl = elements.find(e => e.id === targetId);
+    tgtLabel = tgtEl?.label;
+    // If target element ID not found, fall back to stored name
+    if (!tgtLabel) return name || `${srcLabel} (mín. ${value}m)`;
+  }
+
+  const valueStr = Number.isInteger(value) ? `${value}` : `${value}`;
+  return `${srcLabel} → ${tgtLabel} (mín. ${valueStr}m)`;
+};
+
+/**
+ * Returns a new array of constraints with `name` refreshed to reflect the
+ * current element labels. Does not mutate the originals.
+ *
+ * @param {Array<object>} constraints
+ * @param {Array<{id, label}>} elements
+ * @returns {Array<object>}
+ */
+export const refreshConstraintNames = (constraints, elements) =>
+  constraints.map(c => ({ ...c, name: getConstraintDisplayName(c, elements) }));
+
 export const validateConstraint = (constraint, elements, terrainPoints, baseScale) => {
   if (!constraint.enabled) {
     return { valid: true, actualDistance: Infinity, requiredDistance: constraint.value };

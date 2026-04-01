@@ -1,6 +1,7 @@
 {
   "name": "home-distribution",
   "version": "0.1.0",
+  "type": "module",
   "description": "Aplicación web para diseñar y planificar la distribución de elementos en un terreno para vivienda autosustentable",
   "main": "src/index.js",
   "scripts": {
@@ -31,10 +32,13 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.27",
     "eslint": "^8.35.0",
     "eslint-plugin-react": "^7.32.2",
     "jest": "^30.3.0",
     "jsdom": "^29.0.1",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
     "vite": "^4.2.0",
     "vitest": "^0.29.0"
   }

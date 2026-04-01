@@ -10,10 +10,10 @@ const CATEGORIES = [
 
 const SVG_W = 420;
 const SVG_H = 300;
-const PX_PER_M = 20;       // 20 px = 1 m
-const SNAP_M = 0.5;        // snap to 0.5 m grid
-const OX = SVG_W / 2;     // SVG origin x
-const OY = SVG_H / 2;     // SVG origin y
+const PX_PER_M = 20;
+const SNAP_M = 0.5;
+const OX = SVG_W / 2;
+const OY = SVG_H / 2;
 
 const toSvg  = (mx, my) => ({ x: mx * PX_PER_M + OX,  y: my  * PX_PER_M + OY  });
 const toM    = (px, py) => ({ x: (px - OX) / PX_PER_M, y: (py - OY) / PX_PER_M });
@@ -43,8 +43,8 @@ export default function CustomElementModal({ onSave, onCancel }) {
   const [color, setColor]             = useState('#cccccc');
   const [borderColor, setBorderColor] = useState('#888888');
   const [points, setPoints]           = useState([]);
-  const [mouse, setMouse]             = useState(null);   // snapped, meters
-  const [rawMouse, setRawMouse]       = useState(null);   // SVG px, unsnapped
+  const [mouse, setMouse]             = useState(null);
+  const [rawMouse, setRawMouse]       = useState(null);
   const [done, setDone]               = useState(false);
   const svgRef = useRef(null);
 
@@ -111,7 +111,7 @@ export default function CustomElementModal({ onSave, onCancel }) {
     });
   };
 
-  // ── Grid lines ──────────────────────────────────────────────────────────────
+  // Grid lines
   const gridLines = [];
   for (let x = Math.floor(-OX / PX_PER_M); x <= Math.ceil((SVG_W - OX) / PX_PER_M); x++) {
     const sx = toSvg(x, 0).x;
@@ -124,7 +124,7 @@ export default function CustomElementModal({ onSave, onCancel }) {
       stroke={y === 0 ? '#bbb' : '#eee'} strokeWidth={y === 0 ? 1 : 0.5} />);
   }
 
-  // ── Edge length labels ───────────────────────────────────────────────────────
+  // Edge length labels
   const edgeLabels = [];
   const addEdgeLabel = (a, b, key) => {
     const dx = b.x - a.x, dy = b.y - a.y;
@@ -147,7 +147,7 @@ export default function CustomElementModal({ onSave, onCancel }) {
     if (mouse && n > 0) addEdgeLabel(points[n - 1], mouse, 'el-prev');
   }
 
-  // ── Angle labels ─────────────────────────────────────────────────────────────
+  // Angle labels
   const angleLabels = [];
   const addAngleLabel = (prev, vertex, next, key) => {
     const a = angle3(prev, vertex, next);
@@ -172,7 +172,6 @@ export default function CustomElementModal({ onSave, onCancel }) {
       addAngleLabel(points[(i - 1 + n) % n], p, points[(i + 1) % n], `ang${i}`)
     );
   } else {
-    // Angles at committed vertices (including preview direction at last vertex)
     points.forEach((p, i) => {
       const prev = i > 0 ? points[i - 1] : null;
       const next = i < n - 1 ? points[i + 1] : (i === n - 1 && mouse ? mouse : null);
@@ -180,58 +179,66 @@ export default function CustomElementModal({ onSave, onCancel }) {
     });
   }
 
-  // ── Polygon SVG points string ─────────────────────────────────────────────
   const svgPolygonPts = points.map(p => { const s = toSvg(p.x, p.y); return `${s.x},${s.y}`; }).join(' ');
   const areaM2 = done && n >= 3 ? shoelaceArea(points).toFixed(1) : null;
   const canSave = name.trim().length > 0 && n >= 3 && done;
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-    }}>
-      <div style={{
-        background: '#fff', borderRadius: 8, padding: 20, width: 480,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', gap: 12,
-      }}>
-        <h3 style={{ margin: 0 }}>Crear objeto personalizado</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]">
+      <div className="bg-white rounded-xl p-5 w-[490px] shadow-2xl flex flex-col gap-3 text-sm">
+        <h3 className="m-0 text-base font-semibold text-gray-800">Crear objeto personalizado</h3>
 
-        {/* ── Form fields ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {/* Form fields */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label style={{ fontSize: 12, display: 'block', marginBottom: 2 }}>Nombre</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)}
+            <label className="form-label">Nombre</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
               placeholder="Ej: Cobertizo"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', border: '1px solid #ccc', borderRadius: 4 }} />
+              className="form-input"
+            />
           </div>
           <div>
-            <label style={{ fontSize: 12, display: 'block', marginBottom: 2 }}>Categoría</label>
-            <select value={category} onChange={e => setCategory(e.target.value)}
-              style={{ width: '100%', padding: '4px 6px', border: '1px solid #ccc', borderRadius: 4 }}>
+            <label className="form-label">Categoría</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="form-select"
+            >
               {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label style={{ fontSize: 12, display: 'block', marginBottom: 2 }}>Color de relleno</label>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input type="color" value={color} onChange={e => setColor(e.target.value)}
-                style={{ width: 32, height: 28, padding: 0, border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }} />
-              <span style={{ fontSize: 11, color: '#666' }}>{color}</span>
+            <label className="form-label">Color de relleno</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={color}
+                onChange={e => setColor(e.target.value)}
+                className="w-8 h-7 p-0 border border-gray-300 rounded cursor-pointer"
+              />
+              <span className="text-xs text-gray-500">{color}</span>
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 12, display: 'block', marginBottom: 2 }}>Color de borde</label>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input type="color" value={borderColor} onChange={e => setBorderColor(e.target.value)}
-                style={{ width: 32, height: 28, padding: 0, border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }} />
-              <span style={{ fontSize: 11, color: '#666' }}>{borderColor}</span>
+            <label className="form-label">Color de borde</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={borderColor}
+                onChange={e => setBorderColor(e.target.value)}
+                className="w-8 h-7 p-0 border border-gray-300 rounded cursor-pointer"
+              />
+              <span className="text-xs text-gray-500">{borderColor}</span>
             </div>
           </div>
         </div>
 
-        {/* ── Drawing area ── */}
+        {/* Drawing area */}
         <div>
-          <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>
+          <div className="text-xs text-gray-500 mb-1.5">
             {done
               ? `Polígono cerrado — ${n} vértices · ${areaM2} m²`
               : n === 0
@@ -240,24 +247,25 @@ export default function CustomElementModal({ onSave, onCancel }) {
               ? `${n} vértice${n > 1 ? 's' : ''} — agrega al menos ${3 - n} más`
               : 'Clic en el primer vértice (●) o presiona Enter para cerrar'}
           </div>
-          <svg ref={svgRef} width={SVG_W} height={SVG_H}
-            style={{ border: '1px solid #ccc', borderRadius: 4, cursor: done ? 'default' : 'crosshair', display: 'block' }}
+          <svg
+            ref={svgRef}
+            width={SVG_W}
+            height={SVG_H}
+            className="border border-gray-300 rounded block"
+            style={{ cursor: done ? 'default' : 'crosshair' }}
             onMouseMove={handleSvgMouseMove}
             onClick={handleSvgClick}
-            onMouseLeave={() => { setMouse(null); setRawMouse(null); }}>
-
+            onMouseLeave={() => { setMouse(null); setRawMouse(null); }}
+          >
             {gridLines}
 
-            {/* Scale bar */}
             <line x1={8} y1={SVG_H - 8} x2={8 + PX_PER_M} y2={SVG_H - 8} stroke="#aaa" strokeWidth={1.5} />
             <text x={8 + PX_PER_M / 2} y={SVG_H - 16} fontSize={9} fill="#aaa" textAnchor="middle">1 m</text>
 
-            {/* Filled polygon when done */}
             {done && n >= 3 && (
               <polygon points={svgPolygonPts} fill={color} stroke={borderColor} strokeWidth={2} />
             )}
 
-            {/* Edges while drawing */}
             {!done && points.map((p, i) => {
               if (i === 0) return null;
               const s1 = toSvg(points[i - 1].x, points[i - 1].y);
@@ -266,11 +274,9 @@ export default function CustomElementModal({ onSave, onCancel }) {
                 stroke="#8B4513" strokeWidth={2} />;
             })}
 
-            {/* Edge labels + angle labels */}
             {edgeLabels}
             {angleLabels}
 
-            {/* Preview lines */}
             {!done && mouse && n > 0 && (() => {
               const last = points[n - 1];
               const s1 = toSvg(last.x, last.y);
@@ -286,7 +292,6 @@ export default function CustomElementModal({ onSave, onCancel }) {
               </>);
             })()}
 
-            {/* Vertices */}
             {points.map((p, i) => {
               const s = toSvg(p.x, p.y);
               const first = i === 0;
@@ -294,7 +299,6 @@ export default function CustomElementModal({ onSave, onCancel }) {
                 fill={first && isNearFirst ? '#4CAF50' : 'red'} stroke="white" strokeWidth={1.5} />;
             })}
 
-            {/* Snapped cursor crosshair */}
             {!done && mouse && (
               <circle cx={toSvg(mouse.x, mouse.y).x} cy={toSvg(mouse.x, mouse.y).y}
                 r={3} fill="none" stroke="#2196F3" strokeWidth={1} opacity={0.7} />
@@ -302,14 +306,14 @@ export default function CustomElementModal({ onSave, onCancel }) {
           </svg>
         </div>
 
-        {/* ── Action buttons ── */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onCancel} style={{ padding: '6px 14px' }}>Cancelar</button>
-          <button onClick={handleSave} disabled={!canSave}
-            style={{
-              padding: '6px 16px', border: 'none', borderRadius: 4, cursor: canSave ? 'pointer' : 'default',
-              background: canSave ? '#1976d2' : '#ccc', color: 'white', fontWeight: 'bold',
-            }}>
+        {/* Action buttons */}
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onCancel} className="btn">Cancelar</button>
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            className="btn-primary"
+          >
             Guardar objeto
           </button>
         </div>

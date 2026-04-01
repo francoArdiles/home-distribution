@@ -32,11 +32,12 @@ describe('SolarPanel', () => {
     onClose = vi.fn();
   });
 
-  test('renderiza encabezado "Configuración Solar"', () => {
-    const { getByText } = render(
-      <SolarPanel solarConfig={defaultSolarConfig} onConfigChange={onConfigChange} onClose={onClose} />
+  test('renderiza LocationSelector y TimeSelector (sin título propio — está en FloatingPanel)', () => {
+    const { getByTestId } = render(
+      <SolarPanel solarConfig={defaultSolarConfig} onConfigChange={onConfigChange} />
     );
-    expect(getByText(/configuración solar/i)).toBeInTheDocument();
+    expect(getByTestId('location-selector')).toBeInTheDocument();
+    expect(getByTestId('time-selector')).toBeInTheDocument();
   });
 
   test('renderiza LocationSelector', () => {
@@ -77,13 +78,7 @@ describe('SolarPanel', () => {
     );
   });
 
-  test('botón Cerrar llama onClose', () => {
-    const { getByText } = render(
-      <SolarPanel solarConfig={defaultSolarConfig} onConfigChange={onConfigChange} onClose={onClose} />
-    );
-    fireEvent.click(getByText(/cerrar/i));
-    expect(onClose).toHaveBeenCalled();
-  });
+  // El botón Cerrar fue movido a FloatingPanel; SolarPanel ya no lo renderiza.
 
   test('cambio en LocationSelector llama onConfigChange con nueva location', () => {
     const { getByText } = render(

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Layer, Line, Circle, Text, Group } from 'react-konva';
+import React, { useState, useEffect, useRef } from 'react';
+import { Layer, Rect, Line, Circle, Text, Group } from 'react-konva';
 import { distancePointToPoint, distanceElementToTerrain, distanceElementToElement } from '../utils/distanceUtils.js';
 
 const MANUAL_COLOR = '#2196F3';
@@ -25,6 +25,7 @@ const MeasurementOverlay = ({
   width = 800,
   height = 600,
   onAddMeasurement,
+  onRemoveMeasurement,
   onCancel,
   showMeasurements = true,
   showConstraints = true,
@@ -37,6 +38,11 @@ const MeasurementOverlay = ({
   const [firstPoint, setFirstPoint] = useState(null);
   const [mousePoint, setMousePoint] = useState(null);
   const [areaVertices, setAreaVertices] = useState([]);
+  const areaVerticesRef = useRef([]);
+  areaVerticesRef.current = areaVertices;
+
+  // Layer pixel → meters
+  const toMeters = (lx, ly) => ({ x: lx / baseScale, y: ly / baseScale });
 
   // Reset state when activeTool changes
   useEffect(() => {
@@ -45,7 +51,7 @@ const MeasurementOverlay = ({
     setAreaVertices([]);
   }, [activeTool]);
 
-  // Escape key cancels measurement in progress
+  // Escape cancels; Space finishes area polygon
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
@@ -53,11 +59,20 @@ const MeasurementOverlay = ({
         setMousePoint(null);
         setAreaVertices([]);
         onCancel?.();
+      } else if (e.key === ' ' && activeTool === 'area') {
+        e.preventDefault();
+        const vertices = areaVerticesRef.current;
+        if (vertices.length < 3) return;
+        const verticesMeters = vertices.map(v => toMeters(v.x, v.y));
+        const value = calculatePolygonArea(verticesMeters);
+        onAddMeasurement?.({ type: 'area', value, vertices, id: Date.now().toString() });
+        setAreaVertices([]);
+        setMousePoint(null);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onCancel]);
+  }, [onCancel, activeTool, onAddMeasurement]);
 
   // Convert stage pointer position to layer pixels
   const getLayerPoint = (e) => {
@@ -74,9 +89,6 @@ const MeasurementOverlay = ({
   // Layer pixel → stage pixel
   const toStageX = (lx) => lx * scale + position.x;
   const toStageY = (ly) => ly * scale + position.y;
-
-  // Layer pixel → meters
-  const toMeters = (lx, ly) => ({ x: lx / baseScale, y: ly / baseScale });
 
   const handleLayerClick = (e) => {
     const lp = getLayerPoint(e);
@@ -103,17 +115,6 @@ const MeasurementOverlay = ({
     const lp = getLayerPoint(e);
     if (!lp) return;
     setMousePoint(lp);
-  };
-
-  const handleLayerDblClick = (e) => {
-    if (activeTool === 'area' && areaVertices.length >= 3) {
-      // Calculate area in meters² using shoelace (vertices in layer pixels → convert)
-      const verticesMeters = areaVertices.map(v => toMeters(v.x, v.y));
-      const value = calculatePolygonArea(verticesMeters);
-      onAddMeasurement?.({ type: 'area', value, vertices: areaVertices, id: Date.now().toString() });
-      setAreaVertices([]);
-      setMousePoint(null);
-    }
   };
 
   // Returns the stage-pixel point on an element's border in the direction of (towardX, towardY)
@@ -249,24 +250,32 @@ const MeasurementOverlay = ({
   };
 
   // Check if any interactive layer needed
-  const isActive = activeTool === 'distance' || activeTool === 'area';
+  const isActive = activeTool === 'distance' || activeTool === 'area' || activeTool === 'eraser';
+
+  const eraserColor = '#EF4444';
 
   // Render saved measurements
   const renderMeasurements = () => {
     if (!showMeasurements) return null;
+    const isEraser = activeTool === 'eraser';
     return activeMeasurements.map((m) => {
+      const handleEraseClick = isEraser ? () => onRemoveMeasurement?.(m.id) : undefined;
+      const hoverProps = isEraser ? { cursor: 'pointer' } : {};
+      const color = isEraser ? eraserColor : MANUAL_COLOR;
+
       if (m.type === 'distance') {
         const sx1 = toStageX(m.p1.x);
         const sy1 = toStageY(m.p1.y);
         const sx2 = toStageX(m.p2.x);
         const sy2 = toStageY(m.p2.y);
         return (
-          <Group key={m.id}>
+          <Group key={m.id} onClick={handleEraseClick} data-testid={isEraser ? 'erasable-measurement' : undefined} {...hoverProps}>
             <Line
               data-testid="measurement-line"
               points={[sx1, sy1, sx2, sy2]}
-              stroke={MANUAL_COLOR}
-              strokeWidth={2}
+              stroke={color}
+              strokeWidth={isEraser ? 3 : 2}
+              dash={isEraser ? [6, 3] : undefined}
             />
             <Text
               data-testid="measurement-label"
@@ -274,7 +283,7 @@ const MeasurementOverlay = ({
               y={(sy1 + sy2) / 2}
               text={`${m.value.toFixed(2)}m`}
               fontSize={12}
-              fill={MANUAL_COLOR}
+              fill={color}
             />
           </Group>
         );
@@ -284,14 +293,15 @@ const MeasurementOverlay = ({
         const cx = m.vertices.reduce((s, v) => s + toStageX(v.x), 0) / m.vertices.length;
         const cy = m.vertices.reduce((s, v) => s + toStageY(v.y), 0) / m.vertices.length;
         return (
-          <Group key={m.id}>
+          <Group key={m.id} onClick={handleEraseClick} data-testid={isEraser ? 'erasable-measurement' : undefined} {...hoverProps}>
             <Line
               data-testid="area-polygon"
               points={flatPts}
               closed
-              stroke={MANUAL_COLOR}
-              strokeWidth={2}
-              fill="rgba(33,150,243,0.1)"
+              stroke={color}
+              strokeWidth={isEraser ? 3 : 2}
+              fill={isEraser ? 'rgba(239,68,68,0.1)' : 'rgba(33,150,243,0.1)'}
+              dash={isEraser ? [6, 3] : undefined}
             />
             <Text
               data-testid="measurement-label"
@@ -299,7 +309,7 @@ const MeasurementOverlay = ({
               y={cy}
               text={`${m.value.toFixed(2)}m²`}
               fontSize={12}
-              fill={MANUAL_COLOR}
+              fill={color}
             />
           </Group>
         );
@@ -310,40 +320,95 @@ const MeasurementOverlay = ({
 
   return (
     <>
-      {/* Passive layer: saved measurements, auto-distances, violations */}
+      {/* Passive layer: auto-distances, violations (+ measurements when not erasing) */}
       <Layer>
-        {renderMeasurements()}
+        {activeTool !== 'eraser' && renderMeasurements()}
         {renderAutoDistances()}
         {renderViolations()}
       </Layer>
-      {/* Interactive layer for active tool — has data-testid="measurement-layer" */}
+      {/* Interactive layer for active tool */}
       {isActive && (
-        <Layer
-          data-testid="measurement-layer"
-          onClick={handleLayerClick}
-          onMouseMove={handleLayerMouseMove}
-          onDblClick={handleLayerDblClick}
-        >
+        <Layer data-testid="measurement-layer">
+          {/* In eraser mode measurements are clickable here, above the hitbox */}
+          {activeTool === 'eraser' && renderMeasurements()}
+          {/* Transparent hitbox so Konva receives pointer events on empty canvas.
+              Only needed for distance/area tools; eraser acts directly on shapes. */}
+          {activeTool !== 'eraser' && (
+            <Rect
+              x={0} y={0} width={width} height={height}
+              fill="transparent"
+              onClick={handleLayerClick}
+              onMouseMove={handleLayerMouseMove}
+              onTap={handleLayerClick}
+            />
+          )}
           {/* Preview line for distance tool */}
-          {activeTool === 'distance' && firstPoint && mousePoint && (
-            <Line
-              data-testid="measurement-preview"
-              points={[toStageX(firstPoint.x), toStageY(firstPoint.y), toStageX(mousePoint.x), toStageY(mousePoint.y)]}
-              stroke={PREVIEW_COLOR}
-              strokeWidth={1}
-              dash={[5, 5]}
-            />
-          )}
+          {activeTool === 'distance' && firstPoint && mousePoint && (() => {
+            const p1m = toMeters(firstPoint.x, firstPoint.y);
+            const p2m = toMeters(mousePoint.x, mousePoint.y);
+            const dist = distancePointToPoint(p1m, p2m);
+            const mx = (toStageX(firstPoint.x) + toStageX(mousePoint.x)) / 2;
+            const my = (toStageY(firstPoint.y) + toStageY(mousePoint.y)) / 2;
+            return (
+              <>
+                <Line
+                  data-testid="measurement-preview"
+                  points={[toStageX(firstPoint.x), toStageY(firstPoint.y), toStageX(mousePoint.x), toStageY(mousePoint.y)]}
+                  stroke={PREVIEW_COLOR}
+                  strokeWidth={1}
+                  dash={[5, 5]}
+                />
+                <Text
+                  data-testid="measurement-preview-label"
+                  x={mx + 6} y={my - 14}
+                  text={`${dist.toFixed(2)}m`}
+                  fontSize={12}
+                  fill={PREVIEW_COLOR}
+                  listening={false}
+                />
+              </>
+            );
+          })()}
           {/* Area preview polygon */}
-          {activeTool === 'area' && areaVertices.length >= 2 && (
-            <Line
-              data-testid="area-preview"
-              points={areaVertices.flatMap(v => [toStageX(v.x), toStageY(v.y)])}
-              stroke={PREVIEW_COLOR}
-              strokeWidth={1}
-              dash={[5, 5]}
+          {activeTool === 'area' && areaVertices.length >= 2 && mousePoint && (() => {
+            const previewVerts = [...areaVertices, mousePoint];
+            const previewMeters = previewVerts.map(v => toMeters(v.x, v.y));
+            const previewArea = calculatePolygonArea(previewMeters);
+            const cx = previewVerts.reduce((s, v) => s + toStageX(v.x), 0) / previewVerts.length;
+            const cy = previewVerts.reduce((s, v) => s + toStageY(v.y), 0) / previewVerts.length;
+            return (
+              <>
+                <Line
+                  data-testid="area-preview"
+                  points={previewVerts.flatMap(v => [toStageX(v.x), toStageY(v.y)])}
+                  closed
+                  stroke={PREVIEW_COLOR}
+                  strokeWidth={1}
+                  dash={[5, 5]}
+                  fill="rgba(158,158,158,0.1)"
+                />
+                <Text
+                  data-testid="area-preview-label"
+                  x={cx} y={cy}
+                  text={`${previewArea.toFixed(2)}m²`}
+                  fontSize={12}
+                  fill={PREVIEW_COLOR}
+                  offsetX={20} offsetY={6}
+                  listening={false}
+                />
+              </>
+            );
+          })()}
+          {/* Vertex dots while drawing area */}
+          {activeTool === 'area' && areaVertices.map((v, i) => (
+            <Circle
+              key={i}
+              data-testid="area-vertex"
+              x={toStageX(v.x)} y={toStageY(v.y)}
+              radius={4}
+              fill={PREVIEW_COLOR}
             />
-          )}
+          ))}
         </Layer>
       )}
     </>

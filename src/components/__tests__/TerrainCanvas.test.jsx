@@ -145,9 +145,9 @@ describe('TerrainCanvas', () => {
     });
   };
 
-  const pressKey = (wrapper, key) => {
+  const pressKey = (wrapper, key, extra = {}) => {
     act(() => {
-      fireEvent.keyDown(window, { key });
+      fireEvent.keyDown(window, { key, ...extra });
     });
   };
 
@@ -284,13 +284,27 @@ describe('TerrainCanvas', () => {
       expect(lastCallAfterEnter).toEqual(lastCallBeforeEnter);
     });
 
-    test('pressing Escape clears all points', () => {
+    test('pressing Escape no longer clears points (only cancels active tool)', () => {
       const wrapper = createWrapper();
+      const callsBefore = onPointsChange.mock.calls.length;
 
       clickCanvas(wrapper, 100, 100);
       clickCanvas(wrapper, 200, 200);
       clickCanvas(wrapper, 300, 100);
       pressKey(wrapper, 'Escape');
+
+      // ESC should not clear points — onPointsChange should not be called after ESC
+      const callsAfter = onPointsChange.mock.calls.length;
+      expect(callsAfter).toBe(callsBefore + 3); // solo los 3 clicks, no el reset
+    });
+
+    test('pressing Shift+Delete clears all points (full reset)', () => {
+      const wrapper = createWrapper();
+
+      clickCanvas(wrapper, 100, 100);
+      clickCanvas(wrapper, 200, 200);
+      clickCanvas(wrapper, 300, 100);
+      pressKey(wrapper, 'Delete', { shiftKey: true });
 
       expect(onPointsChange).toHaveBeenLastCalledWith([]);
     });

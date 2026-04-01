@@ -38,10 +38,12 @@ describe('ConstraintPanel', () => {
     expect(getByText('Restricciones')).toBeInTheDocument();
   });
 
-  test('renders constraint names', () => {
+  test('renders constraint names derived dynamically from element labels', () => {
     const { getByText } = render(<ConstraintPanel {...props} />);
-    expect(getByText(/Casa al límite/)).toBeInTheDocument();
-    expect(getByText(/Árbol a árbol/)).toBeInTheDocument();
+    // c1: Casa → Límite del terreno (mín. 3m)
+    expect(getByText(/Casa → Límite del terreno/)).toBeInTheDocument();
+    // c2: Huerto → Árbol Frutal (mín. 4m)
+    expect(getByText(/Huerto → Árbol Frutal/)).toBeInTheDocument();
   });
 
   test('invalid constraint shows red violation indicator', () => {

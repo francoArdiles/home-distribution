@@ -16,7 +16,7 @@ const TerrainCanvas = ({
   snapToGridEnabled = false,
   solarVisible = false, solarConfig = null,
   measurementConfig = null,
-  onAddMeasurement, onSetActiveTool,
+  onAddMeasurement, onRemoveMeasurement, onSetActiveTool,
   selectedElementId = null,
   violatingIds = null,
   customDefinitions = [],
@@ -428,6 +428,10 @@ const TerrainCanvas = ({
           onFinish?.();
         }
       } else if (e.key === 'Escape') {
+        // ESC solo cancela la herramienta activa, no borra el terreno
+        onCancel?.();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.shiftKey) {
+        // Shift+Delete/Backspace: reset completo del lienzo
         setPoints([]);
         setFinishedInternal(false);
         onPointsChange([]);
@@ -922,6 +926,7 @@ const TerrainCanvas = ({
           showMeasurements={measurementConfig.showMeasurements}
           showConstraints={measurementConfig.showConstraints}
           onAddMeasurement={onAddMeasurement}
+          onRemoveMeasurement={onRemoveMeasurement}
           onCancel={() => onSetActiveTool?.('none')}
         />
       )}

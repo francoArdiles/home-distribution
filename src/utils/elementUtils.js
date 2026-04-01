@@ -2,11 +2,29 @@ const generateId = () => Date.now().toString(36) + Math.random().toString(36).su
 
 export const removeElement = (elements, id) => elements.filter(el => el.id !== id);
 
-export const duplicateElement = (element, offsetX = 1, offsetY = 1) => ({
+/**
+ * Devuelve el nombre base de una etiqueta eliminando el sufijo " (N)".
+ * "Casa (2)" → "Casa", "Casa" → "Casa"
+ */
+export const baseLabel = (label) => label.replace(/ \(\d+\)$/, '');
+
+/**
+ * Dado un nombre base y la lista de etiquetas existentes, devuelve una
+ * etiqueta única: si "Casa" ya existe devuelve "Casa (1)", etc.
+ */
+export const uniqueLabel = (base, existingLabels) => {
+  if (!existingLabels.includes(base)) return base;
+  let n = 1;
+  while (existingLabels.includes(`${base} (${n})`)) n++;
+  return `${base} (${n})`;
+};
+
+export const duplicateElement = (element, offsetX, offsetY, existingLabels = []) => ({
   ...element,
   id: generateId(),
-  x: element.x + offsetX,
-  y: element.y + offsetY,
+  x: element.x + (offsetX ?? 1),
+  y: element.y + (offsetY ?? 1),
+  label: uniqueLabel(baseLabel(element.label), existingLabels),
   isSelected: false,
 });
 

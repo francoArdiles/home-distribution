@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import { getDefaultConstraints } from '../utils/constraintUtils.js';
+import { getDefaultConstraints, getConstraintDisplayName } from '../utils/constraintUtils.js';
 
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
 
-// Human-readable label for a sourceId
 const sourceLabel = (sourceId, elements) => {
   if (!sourceId || sourceId === 'any') return 'Cualquier elemento';
   const el = elements.find(e => e.id === sourceId);
   return el ? (el.label || el.definitionId) : sourceId;
 };
 
-// Human-readable label for a targetId
 const targetLabel = (targetId, elements) => {
   if (targetId === 'terrain') return 'Límite del terreno';
   if (targetId === 'any') return 'Cualquier otro elemento';
@@ -26,7 +24,7 @@ const ConstraintPanel = ({
   onToggleConstraint,
   validationResults = [],
 }) => {
-  const [formSource, setFormSource] = useState('');     // element id or '' (any)
+  const [formSource, setFormSource] = useState('');
   const [formTarget, setFormTarget] = useState('terrain');
   const [formValue, setFormValue] = useState('3');
 
@@ -36,7 +34,7 @@ const ConstraintPanel = ({
     e.preventDefault();
     const distance = parseFloat(formValue);
     if (!formValue || isNaN(distance) || distance <= 0) return;
-    if (!formSource) return; // source is required
+    if (!formSource) return;
 
     const srcLabel = sourceLabel(formSource, elements);
     const tgtLabel = targetLabel(formTarget, elements);
@@ -63,27 +61,22 @@ const ConstraintPanel = ({
     });
   };
 
-  const stopPropagation = (e) => {
-    e.stopPropagation();
-  };
-
   return (
-    <div style={{ fontSize: 13 }} onMouseDown={stopPropagation} onTouchStart={stopPropagation}>
-      <h3 style={{ marginBottom: 8 }}>Restricciones</h3>
+    <div className="p-3 text-sm border-t border-gray-200">
+      <h3 className="mt-0 mb-2 text-base font-semibold text-gray-800">Restricciones</h3>
 
-      {/* Constraint list */}
-      <ul style={{ listStyle: 'none', padding: 0, marginBottom: 12 }}>
+      <ul className="list-none p-0 mb-3 space-y-1.5">
         {constraints.length === 0 && (
-          <li style={{ color: '#999', fontStyle: 'italic' }}>Sin restricciones</li>
+          <li className="text-gray-400 italic">Sin restricciones</li>
         )}
         {constraints.map(c => {
           const result = getResult(c.id);
           const isValid = !result || result.valid;
           return (
-            <li key={c.id} style={{ marginBottom: 6, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+            <li key={c.id} className="flex items-start gap-1.5">
               <span
                 data-testid={isValid ? 'constraint-valid' : 'constraint-violation'}
-                style={{ color: isValid ? '#4CAF50' : '#F44336', fontWeight: 'bold', minWidth: 14 }}
+                className={`font-bold min-w-[14px] ${isValid ? 'text-green-500' : 'text-red-500'}`}
               >
                 {isValid ? '✓' : '✗'}
               </span>
@@ -92,19 +85,19 @@ const ConstraintPanel = ({
                 checked={c.enabled}
                 onChange={() => onToggleConstraint?.(c.id)}
                 aria-label={`toggle-${c.id}`}
-                style={{ marginTop: 2 }}
+                className="mt-0.5 accent-blue-600"
               />
-              <span style={{ flex: 1, opacity: c.enabled ? 1 : 0.5 }}>
-                {c.name}
+              <span className={`flex-1 ${c.enabled ? '' : 'opacity-50'}`}>
+                {getConstraintDisplayName(c, elements)}
                 {result && !result.valid && (
-                  <span style={{ color: '#F44336', fontSize: 11, marginLeft: 4 }}>
+                  <span className="text-red-500 text-xs ml-1">
                     ({result.actualDistance?.toFixed(1)}m / mín. {result.requiredDistance}m)
                   </span>
                 )}
               </span>
               <button
                 onClick={() => onRemoveConstraint?.(c.id)}
-                style={{ fontSize: 11, padding: '1px 5px' }}
+                className="text-xs px-1 py-0 leading-tight border border-gray-300 rounded hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
               >
                 ×
               </button>
@@ -113,18 +106,16 @@ const ConstraintPanel = ({
         })}
       </ul>
 
-      {/* Add constraint form */}
-      <form onSubmit={handleSubmit} data-testid="add-constraint-form" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <strong>Nueva restricción</strong>
+      <form onSubmit={handleSubmit} data-testid="add-constraint-form" className="flex flex-col gap-2">
+        <strong className="text-xs text-gray-600 uppercase tracking-wide">Nueva restricción</strong>
 
-        {/* Source */}
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span>Origen</span>
+        <label className="flex flex-col gap-1">
+          <span className="form-label">Origen</span>
           <select
             value={formSource}
             onChange={e => setFormSource(e.target.value)}
             required
-            style={{ width: '100%' }}
+            className="form-select"
           >
             <option value="">-- Selecciona un elemento --</option>
             {elements.map(el => (
@@ -135,13 +126,12 @@ const ConstraintPanel = ({
           </select>
         </label>
 
-        {/* Target */}
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span>Destino</span>
+        <label className="flex flex-col gap-1">
+          <span className="form-label">Destino</span>
           <select
             value={formTarget}
             onChange={e => setFormTarget(e.target.value)}
-            style={{ width: '100%' }}
+            className="form-select"
           >
             <option value="terrain">Límite del terreno</option>
             <option value="any">Cualquier otro elemento</option>
@@ -155,24 +145,25 @@ const ConstraintPanel = ({
           </select>
         </label>
 
-        {/* Minimum distance */}
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span>Distancia mínima (m)</span>
+        <label className="flex flex-col gap-1">
+          <span className="form-label">Distancia mínima (m)</span>
           <input
             type="number"
             min="0.1"
-            step="0.5"
+            step="0.1"
             value={formValue}
             onChange={e => setFormValue(e.target.value)}
             required
-            style={{ width: '100%' }}
+            className="form-input"
           />
         </label>
 
-        <button type="submit" disabled={!formSource}>Agregar restricción</button>
+        <button type="submit" disabled={!formSource} className="btn-primary">
+          Agregar restricción
+        </button>
       </form>
 
-      <button onClick={handleApplyDefaults} style={{ marginTop: 10, width: '100%' }}>
+      <button onClick={handleApplyDefaults} className="btn mt-2 w-full">
         Aplicar predeterminadas
       </button>
     </div>
