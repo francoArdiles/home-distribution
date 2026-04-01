@@ -20,7 +20,7 @@ describe('ElementLibraryPanel', () => {
     const { getByText, getAllByRole } = render(<ElementLibraryPanel onSelectElement={vi.fn()} selectedElementType={null} />);
     fireEvent.click(getByText(/Sostenibilidad/));
     const buttons = getAllByRole('button');
-    expect(buttons.length).toBe(7);
+    expect(buttons.length).toBe(8); // 6 categories + 1 "Sostenibilidad" element + 1 "Dibujar camino"
   });
 
   test('clicking an element calls onSelectElement with its id', () => {

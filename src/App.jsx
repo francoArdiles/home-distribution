@@ -14,7 +14,11 @@ import CardinalLayer from './components/CardinalLayer.jsx';
 import SolarPathLayer from './components/SolarPathLayer.jsx';
 import ShadowLayer from './components/ShadowLayer.jsx';
 import { defaultMeasurementConfig, addMeasurement, removeMeasurement, clearMeasurements, setActiveTool, addConstraint, removeConstraint, toggleConstraint } from './utils/measurementConfigUtils.js';
+import { createPath, addPointToPath, finishPath } from './utils/pathUtils.js';
+import PathEditPanel from './components/PathEditPanel.jsx';
+import FloatingPanel from './components/FloatingPanel.jsx';
 import { downloadProject, openProjectFile, ProjectImportError } from './utils/projectIO.js';
+import useUndoHistory from './utils/useUndoHistory.js';
 import { validateAllConstraints } from './utils/constraintUtils.js';
 import MeasurementToolkit from './components/MeasurementToolkit.jsx';
 import ConstraintPanel from './components/ConstraintPanel.jsx';
@@ -60,40 +64,88 @@ function App() {
   const [measurementConfig, setMeasurementConfig] = useState(defaultMeasurementConfig);
   const [measurementPanelOpen, setMeasurementPanelOpen] = useState(false);
 
-  // Floating panels drag state
-  const [solarPanelPos, setSolarPanelPos] = useState({ x: null, y: 60 });
-  const [measurementPanelPos, setMeasurementPanelPos] = useState({ x: 200, y: 60 });
-  const [draggingPanel, setDraggingPanel] = useState(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  // Path (sendero/camino) state
+  const [paths, setPaths] = useState([]);
+  const [draftPath, setDraftPath] = useState(null);
+  const [pathWidth, setPathWidth] = useState(1);
+  const [pathToolActive, setPathToolActive] = useState(false);
+  const [selectedPathId, setSelectedPathId] = useState(null);
 
-  const handleDragStart = useCallback((panelName, e) => {
-    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
-    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
-    const pos = panelName === 'solar' ? solarPanelPos : measurementPanelPos;
-    const isPositioned = pos.x !== null;
-    setDragOffset({
-      x: clientX - (isPositioned ? pos.x : (panelName === 'solar' ? window.innerWidth - 300 : 200)),
-      y: clientY - (isPositioned ? pos.y : 60)
-    });
-    setDraggingPanel(panelName);
-  }, [solarPanelPos, measurementPanelPos]);
-
-  const handleDragMove = useCallback((e) => {
-    if (!draggingPanel) return;
-    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
-    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
-    const newX = clientX - dragOffset.x;
-    const newY = Math.max(60, clientY - dragOffset.y);
-    if (draggingPanel === 'solar') {
-      setSolarPanelPos({ x: newX, y: newY });
-    } else {
-      setMeasurementPanelPos({ x: newX, y: newY });
-    }
-  }, [draggingPanel, dragOffset]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggingPanel(null);
+  const handleStartPath = useCallback(() => {
+    setPathToolActive(true);
+    setDraftPath(null);
   }, []);
+
+  const handlePathClick = useCallback((point) => {
+    if (!pathToolActive) return;
+    setDraftPath(prev => {
+      if (!prev) return createPath(point, pathWidth);
+      return addPointToPath(prev, point);
+    });
+  }, [pathToolActive, pathWidth]);
+
+  // Undo history
+  const { push: pushUndo, undo, canUndo } = useUndoHistory();
+
+  // Capture current undoable state as a snapshot
+  const takeSnapshot = useCallback(() => ({
+    placedElements,
+    paths,
+    entrance,
+  }), [placedElements, paths, entrance]);
+
+  const handlePathFinish = useCallback(() => {
+    if (!draftPath || draftPath.points.length < 2) {
+      setDraftPath(null);
+      setPathToolActive(false);
+      return;
+    }
+    pushUndo(takeSnapshot());
+    const finished = finishPath(draftPath);
+    setPaths(prev => [...prev, finished]);
+    setDraftPath(null);
+    setPathToolActive(false);
+  }, [draftPath, pushUndo, takeSnapshot]);
+
+  const handleCancelPath = useCallback(() => {
+    setDraftPath(null);
+    setPathToolActive(false);
+  }, []);
+
+  const handleSelectPath = useCallback((id) => {
+    setSelectedPathId(prev => prev === id ? null : id);
+  }, []);
+
+  const handleDeletePath = useCallback((id) => {
+    pushUndo(takeSnapshot());
+    setPaths(prev => prev.filter(p => p.id !== id));
+    setSelectedPathId(null);
+  }, [pushUndo, takeSnapshot]);
+
+  const handleUpdatePath = useCallback((id, updates) => {
+    pushUndo(takeSnapshot());
+    setPaths(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  }, [pushUndo, takeSnapshot]);
+
+  // Ctrl+Z handler
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        const snapshot = undo();
+        if (snapshot) {
+          setPlacedElements(snapshot.placedElements);
+          setPaths(snapshot.paths);
+          setEntrance(snapshot.entrance);
+          setSelectedElementId(null);
+          setSelectedPathId(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [undo]);
+
 
   const handleSolarConfigChange = useCallback((partial) => {
     setSolarConfig(prev => mergeSolarConfig(prev, partial));
@@ -149,6 +201,13 @@ function App() {
     setEntranceMode(false);
   }, []);
 
+  // Cancels active tool/selection without clearing the terrain
+  const handleCancelTool = useCallback(() => {
+    setSelectedElementType(null);
+    setSelectedElementId(null);
+    setSelectedPathId(null);
+  }, []);
+
   const handleToggleGrid = useCallback(() => setGridVisible(prev => !prev), []);
 
   // --- Custom element handlers ---
@@ -159,8 +218,8 @@ function App() {
 
   // --- Save / Open ---
   const handleSave = useCallback(() => {
-    downloadProject({ points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions });
-  }, [points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions]);
+    downloadProject({ points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions, paths });
+  }, [points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions, paths]);
 
   const handleOpen = useCallback(async () => {
     try {
@@ -179,6 +238,8 @@ function App() {
       if (project.solar) setSolarConfig(project.solar);
       if (project.measurements) setMeasurementConfig(project.measurements);
       setCustomDefinitions(project.customDefinitions ?? []);
+      setPaths(project.paths ?? []);
+      setSelectedPathId(null);
       setCanvasKey(k => k + 1); // remount TerrainCanvas with loaded points
     } catch (err) {
       if (err instanceof ProjectImportError) {
@@ -208,6 +269,7 @@ function App() {
       if (!inside) return;
     }
 
+    pushUndo(takeSnapshot());
     const newEl = {
       id: generateId(),
       definitionId: def.id,
@@ -225,7 +287,7 @@ function App() {
     };
     setPlacedElements(prev => [...prev, newEl]);
     setSelectedElementType(null);
-  }, [selectedElementType]);
+  }, [selectedElementType, pushUndo, takeSnapshot]);
 
   const handleSelectElement = useCallback((id) => {
     setSelectedElementId(id);
@@ -235,22 +297,25 @@ function App() {
   }, []);
 
   const handleMoveElement = useCallback((id, x, y) => {
+    pushUndo(takeSnapshot());
     setPlacedElements(prev =>
       prev.map(el => el.id === id ? { ...el, x, y } : el)
     );
-  }, []);
+  }, [pushUndo, takeSnapshot]);
 
   const handleResizeElement = useCallback((id, updates) => {
+    pushUndo(takeSnapshot());
     setPlacedElements(prev =>
       prev.map(el => el.id === id ? { ...el, ...updates } : el)
     );
-  }, []);
+  }, [pushUndo, takeSnapshot]);
 
   const handleRotateElement = useCallback((id, rotation) => {
+    pushUndo(takeSnapshot());
     setPlacedElements(prev =>
       prev.map(el => el.id === id ? { ...el, rotation } : el)
     );
-  }, []);
+  }, [pushUndo, takeSnapshot]);
 
   // Keyboard shortcut: S = toggle solar overlay, M = toggle distance tool
   useEffect(() => {
@@ -272,6 +337,7 @@ function App() {
     const handler = (e) => {
       if (!finished) return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId) {
+        pushUndo({ placedElements, paths, entrance });
         setPlacedElements(prev => removeElement(prev, selectedElementId));
         setSelectedElementId(null);
       }
@@ -279,6 +345,7 @@ function App() {
         e.preventDefault();
         const original = placedElements.find(el => el.id === selectedElementId);
         if (original) {
+          pushUndo({ placedElements, paths, entrance });
           const dup = duplicateElement(original, 1, 1);
           setPlacedElements(prev => [...prev, dup]);
           setSelectedElementId(dup.id);
@@ -287,29 +354,8 @@ function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [finished, selectedElementId, placedElements]);
+  }, [finished, selectedElementId, placedElements, paths, entrance, pushUndo]);
 
-  // Floating panels drag events
-  useEffect(() => {
-    const onMouseMove = (e) => handleDragMove(e);
-    const onMouseUp = () => handleDragEnd();
-    const onTouchMove = (e) => handleDragMove(e);
-    const onTouchEnd = () => handleDragEnd();
-
-    if (draggingPanel) {
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
-      window.addEventListener('touchmove', onTouchMove);
-      window.addEventListener('touchend', onTouchEnd);
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
-    };
-  }, [draggingPanel, handleDragMove, handleDragEnd]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
@@ -337,6 +383,18 @@ function App() {
             onSelectElement={setSelectedElementType}
             selectedElementType={selectedElementType}
             customDefinitions={customDefinitions}
+            pathToolActive={pathToolActive}
+            pathWidth={pathWidth}
+            onSetPathWidth={setPathWidth}
+            onStartPath={handleStartPath}
+            onCancelPath={handleCancelPath}
+          />
+        )}
+        {finished && selectedPathId && !pathToolActive && (
+          <PathEditPanel
+            path={paths.find(p => p.id === selectedPathId) ?? null}
+            onDelete={handleDeletePath}
+            onUpdate={handleUpdatePath}
           />
         )}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
@@ -349,7 +407,7 @@ function App() {
             onFinish={handleFinish}
             gridVisible={gridVisible}
             onCursorMove={setCursorPos}
-            onCancel={handleClear}
+            onCancel={handleCancelTool}
             activeElementType={selectedElementType}
             onPlaceElement={handlePlaceElement}
             placedElements={placedElements}
@@ -370,6 +428,13 @@ function App() {
             onSetActiveTool={handleSetActiveTool}
             selectedElementId={selectedElementId}
             customDefinitions={customDefinitions}
+            paths={paths}
+            draftPath={draftPath}
+            selectedPathId={selectedPathId}
+            onPathClick={pathToolActive ? handlePathClick : null}
+            onPathFinish={pathToolActive ? handlePathFinish : null}
+            onSelectPath={handleSelectPath}
+            onUpdatePath={handleUpdatePath}
           />
         </div>
         <InfoPanel
@@ -381,41 +446,22 @@ function App() {
         />
       </div>
       {solarPanelOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            left: solarPanelPos.x ?? (window.innerWidth - 300),
-            top: solarPanelPos.y ?? 60,
-            zIndex: 100,
-            cursor: 'move',
-            background: '#fff',
-            border: '1px solid #ccc',
-            padding: 8,
-          }}
-          onMouseDown={(e) => handleDragStart('solar', e)}
-          onTouchStart={(e) => handleDragStart('solar', e)}
+        <FloatingPanel
+          title="Solar"
+          initialPos={{ x: window.innerWidth - 320, y: 60 }}
+          onClose={() => setSolarPanelOpen(false)}
         >
           <SolarPanel
             solarConfig={solarConfig}
             onConfigChange={handleSolarConfigChange}
-            onClose={() => setSolarPanelOpen(false)}
           />
-        </div>
+        </FloatingPanel>
       )}
       {measurementPanelOpen && finished && (
-        <div
-          style={{
-            position: 'fixed',
-            left: measurementPanelPos.x ?? 200,
-            top: measurementPanelPos.y ?? 60,
-            zIndex: 100,
-            cursor: 'move',
-            background: '#fff',
-            border: '1px solid #ccc',
-            padding: 8,
-          }}
-          onMouseDown={(e) => handleDragStart('measurement', e)}
-          onTouchStart={(e) => handleDragStart('measurement', e)}
+        <FloatingPanel
+          title="Medidas"
+          initialPos={{ x: 200, y: 60 }}
+          onClose={() => setMeasurementPanelOpen(false)}
         >
           <MeasurementToolkit
             activeTool={measurementConfig.activeTool}
@@ -434,7 +480,7 @@ function App() {
             onToggleConstraint={handleToggleConstraint}
             validationResults={validateAllConstraints(measurementConfig.constraints, placedElements, points, baseScale)}
           />
-        </div>
+        </FloatingPanel>
       )}
       {cursorPos && !finished && (
         <div style={{ padding: '4px 8px', background: '#eee', fontSize: '12px' }}>

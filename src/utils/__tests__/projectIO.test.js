@@ -97,6 +97,56 @@ describe('importProject — valid', () => {
 });
 
 // ---------------------------------------------------------------------------
+// paths — export / import
+// ---------------------------------------------------------------------------
+describe('paths — export / import', () => {
+  const samplePath = {
+    id: 'path_1',
+    points: [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 3 }],
+    width: 1.5,
+    label: 'Camino principal',
+    finished: true,
+    color: '#D4A96A',
+    borderColor: '#8B6914',
+  };
+
+  test('exportProject includes paths array', () => {
+    const doc = JSON.parse(exportProject({ ...sampleState, paths: [samplePath] }));
+    expect(Array.isArray(doc.paths)).toBe(true);
+    expect(doc.paths).toHaveLength(1);
+    expect(doc.paths[0].id).toBe('path_1');
+  });
+
+  test('exportProject uses empty array when paths is omitted', () => {
+    const doc = JSON.parse(exportProject(sampleState));
+    expect(doc.paths).toEqual([]);
+  });
+
+  test('importProject restores paths from file', () => {
+    const json = exportProject({ ...sampleState, paths: [samplePath] });
+    const result = importProject(json);
+    expect(result.paths).toHaveLength(1);
+    expect(result.paths[0].width).toBe(1.5);
+    expect(result.paths[0].finished).toBe(true);
+  });
+
+  test('importProject returns empty paths array for old files without paths key', () => {
+    const oldFile = JSON.stringify({ version: '2.0.0', terrain: { points: [], finished: false }, elements: [] });
+    const result = importProject(oldFile);
+    expect(result.paths).toEqual([]);
+  });
+
+  test('round-trip preserves all path fields', () => {
+    const json = exportProject({ ...sampleState, paths: [samplePath] });
+    const result = importProject(json);
+    const p = result.paths[0];
+    expect(p.points).toHaveLength(3);
+    expect(p.label).toBe('Camino principal');
+    expect(p.color).toBe('#D4A96A');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // importProject — error cases
 // ---------------------------------------------------------------------------
 describe('importProject — errors', () => {
