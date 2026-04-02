@@ -47,6 +47,16 @@ Home Distribution es una herramienta de planificación 2D que te permite diseña
 - **Rotar**: Arrastra punto rojo en esquina superior derecha
 - **Duplicar**: Ctrl+D (copia desplazada)
 - **Eliminar**: Delete o Backspace
+- **Ver/editar detalle**: Doble clic en el elemento
+
+### Detalle de Elemento
+Algunos elementos (Piscina, Casa, Huerto) tienen atributos específicos editables. Al hacer doble clic se abre un panel flotante con campos propios del tipo:
+
+- **Piscina**: profundidad, escalones (lista), revestimiento, calefacción
+- **Casa**: pisos, dormitorios, baños, tipo de techo, construcción, notas
+- **Huerto**: tipo de cultivo, sistema de riego, sustrato, estaciones activas, notas
+
+El detalle se guarda con el proyecto y es compatible con versiones anteriores (elementos sin detalle no se ven afectados). Los cambios de detalle se pueden deshacer con Ctrl+Z.
 
 ## Caminos/Senderos
 
@@ -178,4 +188,4 @@ Proyectos antiguos cargan con caminos vacíos.
 ---
 
 Manual actualizado: Abril 2026
-Versión: 5 (caminos, undo Ctrl+Z, FloatingPanel mejorado)
+Versión: 6 (detalle de elementos: piscina, casa, huerto)
