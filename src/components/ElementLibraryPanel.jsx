@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { getElementsByCategory } from '../data/elementDefinitions.js';
 import { categories } from '../data/categories.js';
 
-const ElementLibraryPanel = ({ onSelectElement, selectedElementType, customDefinitions = [] }) => {
+const ElementLibraryPanel = ({
+  onSelectElement, selectedElementType, customDefinitions = [],
+  pathToolActive = false, pathWidth = 1,
+  onSetPathWidth, onStartPath, onCancelPath,
+}) => {
   const [expandedCategory, setExpandedCategory] = useState(null);
 
   const handleCategoryClick = (categoryId) => {
@@ -69,6 +73,44 @@ const ElementLibraryPanel = ({ onSelectElement, selectedElementType, customDefin
           </div>
         </div>
       ))}
+
+      {/* Path tool section */}
+      <div className="mt-3 pt-3 border-t border-gray-300">
+        <h3 className="text-sm font-bold mb-2 text-gray-700 uppercase tracking-wide">🛤️ Caminos</h3>
+        <div className="mb-2">
+          <label className="text-xs text-gray-600 block mb-1">Grosor (m)</label>
+          <input
+            type="number"
+            min="0.5"
+            max="10"
+            step="0.5"
+            value={pathWidth}
+            onChange={e => onSetPathWidth?.(Number(e.target.value))}
+            className="form-input w-full text-xs"
+            disabled={pathToolActive}
+          />
+        </div>
+        {pathToolActive ? (
+          <div>
+            <p className="text-xs text-blue-600 mb-1 font-medium">
+              Dibujando… clic para añadir puntos, <kbd className="bg-gray-100 px-1 rounded">Espacio</kbd> para terminar
+            </p>
+            <button
+              className="btn w-full text-xs"
+              onClick={onCancelPath}
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button
+            className="btn btn-primary w-full text-xs"
+            onClick={onStartPath}
+          >
+            + Dibujar camino
+          </button>
+        )}
+      </div>
     </div>
   );
 };

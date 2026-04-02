@@ -41,6 +41,7 @@ export const exportProject = (state) => {
     solarConfig = null,
     measurementConfig = null,
     customDefinitions = [],
+    paths = [],
   } = state;
 
   const doc = {
@@ -52,6 +53,7 @@ export const exportProject = (state) => {
       entrance,
     },
     elements: placedElements,
+    paths,
     solar: solarConfig,
     measurements: measurementConfig,
     customDefinitions,
@@ -141,13 +143,14 @@ export const importProject = (jsonString) => {
       entrance: terrain.entrance ?? null,
     },
     elements: Array.isArray(doc.elements) ? doc.elements : [],
+    paths: Array.isArray(doc.paths) ? doc.paths : [],
     solar: doc.solar ?? null,
     measurements: doc.measurements ?? null,
     customDefinitions: Array.isArray(doc.customDefinitions) ? doc.customDefinitions : [],
     // Preserve any unknown top-level keys for forward compatibility
     _extra: Object.fromEntries(
       Object.entries(doc).filter(([k]) =>
-        !['version', 'exportedAt', 'terrain', 'elements', 'solar', 'measurements', 'customDefinitions'].includes(k)
+        !['version', 'exportedAt', 'terrain', 'elements', 'paths', 'solar', 'measurements', 'customDefinitions'].includes(k)
       )
     ),
   };

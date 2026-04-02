@@ -7,7 +7,9 @@
       "Bash(npx vitest:*)",
       "Bash(node -e \"const sc = require\\(''suncalc''\\); const p = sc.getPosition\\(new Date\\(''2024-03-21T12:00:00Z''\\), 0, 0\\); console.log\\(p\\);\")",
       "Bash(node -e \"const sc = require\\(''suncalc''\\); const t = sc.getTimes\\(new Date\\(''2024-06-21''\\), 40.4, -3.7\\); console.log\\(''solarNoon:'', t.solarNoon.toUTCString\\(\\)\\); const p = sc.getPosition\\(t.solarNoon, 40.4, -3.7\\); const az = \\(p.azimuth * 180/Math.PI + 180\\); console.log\\(''azimuth at noon:'', az, ''elevation:'', p.altitude*180/Math.PI\\);\")",
-      "Bash(grep -n \"Rect\\\\|hitbox\\\\|areaVerticesRef\\\\| '''' ''''\\\\|Space\" src/components/MeasurementOverlay.jsx)"
+      "Bash(grep -n \"Rect\\\\|hitbox\\\\|areaVerticesRef\\\\| '''' ''''\\\\|Space\" src/components/MeasurementOverlay.jsx)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

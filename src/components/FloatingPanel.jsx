@@ -11,7 +11,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
  *   className  {string}    – clases extra para el contenedor
  *   children   {ReactNode} – contenido del cuerpo
  */
-export default function FloatingPanel({ title, initialPos, onClose, className = '', children }) {
+export default function FloatingPanel({ title, initialPos, onClose, className = '', children, footer }) {
   const [pos, setPos] = useState(initialPos ?? { x: 200, y: 60 });
   const dragging = useRef(false);
   const offset   = useRef({ x: 0, y: 0 });
@@ -80,6 +80,13 @@ export default function FloatingPanel({ title, initialPos, onClose, className = 
       <div>
         {children}
       </div>
+
+      {/* ── Pie (opcional) ── */}
+      {footer && (
+        <div className="px-3 py-2 border-t border-gray-200 bg-gray-50">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

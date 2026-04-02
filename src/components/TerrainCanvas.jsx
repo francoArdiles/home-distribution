@@ -3,6 +3,7 @@ import { Stage, Layer, Line, Circle, Label, Tag, Text } from 'react-konva';
 import { calculateArea, calculatePerimeter, wouldCauseSelfIntersection } from '../utils/geometryUtils';
 import { getEdgeLengthMeters, entranceToT, getEntranceGapPoints, clampEntrancePosition, projectPointOnEdge } from '../utils/entranceUtils.js';
 import PlacedElementsLayer from './PlacedElementsLayer.jsx';
+import PathsLayer from './PathsLayer.jsx';
 import CardinalLayer from './CardinalLayer.jsx';
 import SolarPathLayer from './SolarPathLayer.jsx';
 import ShadowLayer from './ShadowLayer.jsx';
@@ -13,6 +14,8 @@ const TerrainCanvas = ({
   onCursorMove, onFinish, onCancel, finished: finishedProp,
   activeElementType = null, onPlaceElement,
   placedElements = [], onSelectElement, onMoveElement, onResizeElement, onRotateElement,
+  paths = [], draftPath = null, onPathClick, onPathFinish,
+  selectedPathId = null, onSelectPath, onUpdatePath,
   snapToGridEnabled = false,
   solarVisible = false, solarConfig = null,
   measurementConfig = null,
@@ -204,10 +207,25 @@ const TerrainCanvas = ({
     // If terrain is being edited, ignore clicks for placement
     if (terrainEditMode) return;
 
+    // If a path is being drawn, add point (onPathClick is only passed when tool is active)
+    if (onPathClick) {
+      onPathClick({ x: pos.x / baseScale, y: pos.y / baseScale });
+      return;
+    }
+
     // If terrain is finished and an element type is active, place element
     if (finished && activeElementType && onPlaceElement) {
       onPlaceElement(pos.x / baseScale, pos.y / baseScale);
       return;
+    }
+
+    // Click on empty canvas (stage background, not a shape) deselects selected path
+    if (finished && selectedPathId && onSelectPath) {
+      const clickedOnStage = e.target === stageRef.current || e.target?.getType?.() === 'Stage';
+      if (clickedOnStage) {
+        onSelectPath(null);
+        return;
+      }
     }
 
     if (finished) return; // terrain done, not placing element — ignore
@@ -294,6 +312,11 @@ const TerrainCanvas = ({
     // Call onCursorMove with coordinates in meters (only when not finished)
     if (!finished && onCursorMove) {
       onCursorMove({ x: pos.x / baseScale, y: pos.y / baseScale });
+    }
+
+    // Track cursor for path tool preview
+    if (draftPath) {
+      setPathCursorPoint({ x: pos.x / baseScale, y: pos.y / baseScale });
     }
 
     // Find which segment is being hovered for tooltip
@@ -414,13 +437,27 @@ const TerrainCanvas = ({
     }
   }, [position, scale, isPointInCanvas, onPointsChange, points, calculateArea, calculatePerimeter]);
 
+  // Cursor position in meters for path tool preview
+  const [pathCursorPoint, setPathCursorPoint] = useState(null);
+
   // Use a ref so the window keydown handler always sees the latest state
-  const keyStateRef = useRef({ points, finished, onPointsChange, onFinish, onCancel });
-  keyStateRef.current = { points, finished, onPointsChange, onFinish, onCancel };
+  const keyStateRef = useRef({ points, finished, onPointsChange, onFinish, onCancel, onSelectPath });
+  keyStateRef.current = { points, finished, onPointsChange, onFinish, onCancel, onSelectPath };
+
+  // Ref for path finish callback so Space handler always has latest
+  const onPathFinishRef = useRef(onPathFinish);
+  onPathFinishRef.current = onPathFinish;
 
   useEffect(() => {
     const handler = (e) => {
-      const { points, finished, onPointsChange, onFinish, onCancel } = keyStateRef.current;
+      const { points, finished, onPointsChange, onFinish, onCancel, onSelectPath } = keyStateRef.current;
+      if (e.key === ' ' && onPathFinishRef.current) {
+        // Space finishes current path (handled in parent via onPathFinish)
+        // Only intercept if a path is being drawn — MeasurementOverlay handles area tool Space itself
+        e.preventDefault();
+        onPathFinishRef.current();
+        return;
+      }
       if (e.key === 'Enter') {
         if (!finished && points.length >= 3) {
           setFinishedInternal(true);
@@ -428,7 +465,8 @@ const TerrainCanvas = ({
           onFinish?.();
         }
       } else if (e.key === 'Escape') {
-        // ESC solo cancela la herramienta activa, no borra el terreno
+        // ESC deselects selected path, or cancels active tool
+        if (onSelectPath) onSelectPath(null);
         onCancel?.();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.shiftKey) {
         // Shift+Delete/Backspace: reset completo del lienzo
@@ -895,6 +933,17 @@ const TerrainCanvas = ({
           </Label>
         )}
       </Layer>
+      <PathsLayer
+        paths={paths}
+        draftPath={draftPath}
+        cursorPoint={draftPath ? pathCursorPoint : null}
+        scale={scale}
+        position={position}
+        baseScale={baseScale}
+        selectedPathId={selectedPathId}
+        onSelectPath={onSelectPath}
+        onUpdatePath={onUpdatePath}
+      />
       <PlacedElementsLayer
         elements={placedElements}
         scale={scale}
