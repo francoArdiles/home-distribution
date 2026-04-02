@@ -33,7 +33,10 @@ export const getShadowDirection = (azimuth) => ((azimuth + 180) % 360 + 360) % 3
 export const getShadowPolygon = (element, elevation, azimuth) => {
   if (elevation <= 0) return [];
 
-  const length = getShadowLength(element.elementHeight ?? 3, elevation);
+  const elHeight = element.elementHeight ?? 3;
+  if (elHeight <= 0) return [];
+
+  const length = getShadowLength(elHeight, elevation);
   if (!isFinite(length)) return [];
 
   const shadowDir = getShadowDirection(azimuth);
