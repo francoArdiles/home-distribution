@@ -13,7 +13,7 @@ const TerrainCanvas = ({
   onPointsChange, container, gridVisible = false, gridSize = 10,
   onCursorMove, onFinish, onCancel, finished: finishedProp,
   activeElementType = null, onPlaceElement,
-  placedElements = [], onSelectElement, onMoveElement, onResizeElement, onRotateElement,
+  placedElements = [], onSelectElement, onDoubleClickElement, onMoveElement, onResizeElement, onRotateElement,
   paths = [], draftPath = null, onPathClick, onPathFinish,
   selectedPathId = null, onSelectPath, onUpdatePath,
   snapToGridEnabled = false,
@@ -954,6 +954,7 @@ const TerrainCanvas = ({
         violatingIds={violatingIds}
         customDefinitions={customDefinitions}
         onSelectElement={onSelectElement}
+        onDoubleClickElement={onDoubleClickElement}
         onMoveElement={onMoveElement}
         onResizeElement={onResizeElement}
         onRotateElement={onRotateElement}

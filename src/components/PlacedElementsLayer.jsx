@@ -19,6 +19,7 @@ const PlacedElementsLayer = ({
   violatingIds = null,
   customDefinitions = [],
   onSelectElement,
+  onDoubleClickElement,
   onMoveElement,
   onResizeElement,
   onRotateElement,
@@ -51,6 +52,7 @@ const PlacedElementsLayer = ({
         const r = toStage(el.radius || 0);
 
         const handleClick = () => onSelectElement?.(el.id);
+        const handleDblClick = () => onDoubleClickElement?.(el.id);
         const handleDragEnd = (e) => {
           if (!onMoveElement) return;
           const bs = baseScale * scale;
@@ -218,6 +220,7 @@ const PlacedElementsLayer = ({
                 strokeWidth={strokeWidth}
                 draggable
                 onClick={handleClick}
+                onDblClick={handleDblClick}
                 onDragEnd={handleDragEnd}
                 rotation={el.rotation || 0}
                 {...hoverHandlers}
@@ -236,6 +239,7 @@ const PlacedElementsLayer = ({
                 rotation={rot}
                 draggable
                 onClick={handleClick}
+                onDblClick={handleDblClick}
                 onDragEnd={handleDragEnd}
                 {...hoverHandlers}
               />
@@ -249,6 +253,7 @@ const PlacedElementsLayer = ({
                 strokeWidth={strokeWidth}
                 draggable
                 onClick={handleClick}
+                onDblClick={handleDblClick}
                 onDragEnd={handleDragEnd}
                 rotation={el.rotation || 0}
                 {...hoverHandlers}

@@ -16,7 +16,9 @@ import ShadowLayer from './components/ShadowLayer.jsx';
 import { defaultMeasurementConfig, addMeasurement, removeMeasurement, clearMeasurements, setActiveTool, addConstraint, removeConstraint, toggleConstraint } from './utils/measurementConfigUtils.js';
 import { createPath, addPointToPath, finishPath } from './utils/pathUtils.js';
 import PathEditPanel from './components/PathEditPanel.jsx';
+import DetailPanel from './components/DetailPanel.jsx';
 import FloatingPanel from './components/FloatingPanel.jsx';
+import { getDetailSchema, createDefaultDetail } from './utils/detailUtils.js';
 import { downloadProject, openProjectFile, ProjectImportError } from './utils/projectIO.js';
 import useUndoHistory from './utils/useUndoHistory.js';
 import { validateAllConstraints } from './utils/constraintUtils.js';
@@ -42,6 +44,7 @@ function App() {
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [selectedElementType, setSelectedElementType] = useState(null);
   const [selectedElementId, setSelectedElementId] = useState(null);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
 
   // Canvas remount key — increment to force TerrainCanvas to reinitialize (e.g. after project load)
   const [canvasKey, setCanvasKey] = useState(0);
@@ -206,6 +209,7 @@ function App() {
     setSelectedElementType(null);
     setSelectedElementId(null);
     setSelectedPathId(null);
+    setDetailPanelOpen(false);
   }, []);
 
   const handleToggleGrid = useCallback(() => setGridVisible(prev => !prev), []);
@@ -291,10 +295,34 @@ function App() {
 
   const handleSelectElement = useCallback((id) => {
     setSelectedElementId(id);
+    setDetailPanelOpen(false);
     setPlacedElements(prev =>
       prev.map(el => ({ ...el, isSelected: el.id === id }))
     );
   }, []);
+
+  const handleOpenDetailPanel = useCallback((id) => {
+    setSelectedElementId(id);
+    setPlacedElements(prev => {
+      const el = prev.find(e => e.id === id);
+      if (!el) return prev;
+      // Initialize detail with defaults if not yet set
+      if (!el.detail) {
+        const defaultDetail = createDefaultDetail(el.definitionId);
+        if (!defaultDetail) { setDetailPanelOpen(true); return prev; }
+        return prev.map(e => e.id === id ? { ...e, detail: defaultDetail } : e);
+      }
+      return prev;
+    });
+    setDetailPanelOpen(true);
+  }, []);
+
+  const handleUpdateElementDetail = useCallback((id, newDetail) => {
+    pushUndo(takeSnapshot());
+    setPlacedElements(prev =>
+      prev.map(el => el.id === id ? { ...el, detail: newDetail } : el)
+    );
+  }, [pushUndo, takeSnapshot]);
 
   const handleMoveElement = useCallback((id, x, y) => {
     pushUndo(takeSnapshot());
@@ -412,6 +440,7 @@ function App() {
             onPlaceElement={handlePlaceElement}
             placedElements={placedElements}
             onSelectElement={handleSelectElement}
+            onDoubleClickElement={handleOpenDetailPanel}
             onMoveElement={handleMoveElement}
             onResizeElement={handleResizeElement}
             onRotateElement={handleRotateElement}
@@ -482,6 +511,24 @@ function App() {
           />
         </FloatingPanel>
       )}
+      {detailPanelOpen && selectedElementId && finished && (() => {
+        const el = placedElements.find(e => e.id === selectedElementId) ?? null;
+        const schema = el ? getDetailSchema(el.definitionId) : null;
+        return (
+          <FloatingPanel
+            title="Detalle"
+            initialPos={{ x: 400, y: 80 }}
+            onClose={() => setDetailPanelOpen(false)}
+          >
+            <DetailPanel
+              element={el}
+              schema={schema}
+              onChange={(newDetail) => handleUpdateElementDetail(selectedElementId, newDetail)}
+              onClose={() => setDetailPanelOpen(false)}
+            />
+          </FloatingPanel>
+        );
+      })()}
       {cursorPos && !finished && (
         <div style={{ padding: '4px 8px', background: '#eee', fontSize: '12px' }}>
           X: {cursorPos.x.toFixed(1)} m, Y: {cursorPos.y.toFixed(1)} m
