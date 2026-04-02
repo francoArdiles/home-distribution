@@ -147,6 +147,74 @@ describe('paths — export / import', () => {
 });
 
 // ---------------------------------------------------------------------------
+// detail — export / import (Phase 6 Unit 2)
+// ---------------------------------------------------------------------------
+describe('detail — export / import', () => {
+  const elementWithDetail = {
+    id: 'el-pool',
+    definitionId: 'piscina',
+    shape: 'rectangle',
+    x: 10, y: 10, width: 8, height: 4, rotation: 0,
+    detail: {
+      _schema: 'piscina@1',
+      depth: 2.0,
+      steps: [{ width: 0.8, depth: 0.3 }],
+      lining: 'azulejo',
+      heated: true,
+    },
+  };
+
+  test('exportProject serializes detail when present', () => {
+    const doc = JSON.parse(exportProject({ ...sampleState, placedElements: [elementWithDetail] }));
+    expect(doc.elements[0].detail).toBeDefined();
+    expect(doc.elements[0].detail._schema).toBe('piscina@1');
+    expect(doc.elements[0].detail.depth).toBe(2.0);
+    expect(doc.elements[0].detail.lining).toBe('azulejo');
+  });
+
+  test('round-trip preserves full detail object', () => {
+    const json = exportProject({ ...sampleState, placedElements: [elementWithDetail] });
+    const result = importProject(json);
+    const el = result.elements[0];
+    expect(el.detail._schema).toBe('piscina@1');
+    expect(el.detail.steps).toHaveLength(1);
+    expect(el.detail.steps[0].width).toBe(0.8);
+    expect(el.detail.heated).toBe(true);
+  });
+
+  test('importProject returns null detail for elements without detail', () => {
+    const json = exportProject(sampleState);
+    const result = importProject(json);
+    expect(result.elements[0].detail ?? null).toBeNull();
+  });
+
+  test('old file elements without detail field load without error', () => {
+    const oldFile = JSON.stringify({
+      version: '2.0.0',
+      terrain: { points: [], finished: false },
+      elements: [{ id: 'old-el', definitionId: 'casa', shape: 'rectangle', x: 0, y: 0 }],
+    });
+    const result = importProject(oldFile);
+    expect(result.elements[0].detail ?? null).toBeNull();
+    expect(result.elements[0].definitionId).toBe('casa');
+  });
+
+  test('element with unknown schema is preserved as-is on round-trip', () => {
+    const futureElement = {
+      id: 'el-future',
+      definitionId: 'futuristic_element',
+      shape: 'rectangle',
+      x: 0, y: 0, width: 5, height: 5, rotation: 0,
+      detail: { _schema: 'futuristic_element@3', someNewField: 42 },
+    };
+    const json = exportProject({ ...sampleState, placedElements: [futureElement] });
+    const result = importProject(json);
+    expect(result.elements[0].detail._schema).toBe('futuristic_element@3');
+    expect(result.elements[0].detail.someNewField).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // importProject — error cases
 // ---------------------------------------------------------------------------
 describe('importProject — errors', () => {
