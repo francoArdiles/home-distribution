@@ -48,21 +48,8 @@ export default function CustomElementModal({ onSave, onCancel }) {
   const [origin, setOrigin]           = useState({ x: SVG_W / 2, y: SVG_H / 2 });
   const svgRef = useRef(null);
 
-  useEffect(() => {
-    const el = svgRef.current;
-    if (!el) return;
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
-  }, [handleWheel]);
-
   const toSvg = useCallback((mx, my) => ({ x: mx * zoom + origin.x, y: my * zoom + origin.y }), [zoom, origin]);
   const toM   = useCallback((px, py) => ({ x: (px - origin.x) / zoom, y: (py - origin.y) / zoom }), [zoom, origin]);
-
-  const n = points.length;
-  const isNearFirst = !done && rawMouse && n >= 3 && (() => {
-    const f = toSvg(points[0].x, points[0].y);
-    return Math.hypot(rawMouse.x - f.x, rawMouse.y - f.y) < 16;
-  })();
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -81,6 +68,19 @@ export default function CustomElementModal({ onSave, onCancel }) {
     });
   }, []);
 
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  const n = points.length;
+  const isNearFirst = !done && rawMouse && n >= 3 && (() => {
+    const f = toSvg(points[0].x, points[0].y);
+    return Math.hypot(rawMouse.x - f.x, rawMouse.y - f.y) < 16;
+  })();
+
   const handleSvgMouseMove = useCallback((e) => {
     if (done) return;
     const rect = svgRef.current?.getBoundingClientRect();
@@ -90,7 +90,7 @@ export default function CustomElementModal({ onSave, onCancel }) {
     setRawMouse({ x: px, y: py });
     const m = toM(px, py);
     setMouse({ x: snap(m.x), y: snap(m.y) });
-  }, [done]);
+  }, [done, toM]);
 
   const handleSvgClick = useCallback((e) => {
     if (done) return;
@@ -104,7 +104,7 @@ export default function CustomElementModal({ onSave, onCancel }) {
     }
     const m = toM(px, py);
     setPoints(prev => [...prev, { x: snap(m.x), y: snap(m.y) }]);
-  }, [done, n, points]);
+  }, [done, n, points, toSvg, toM]);
 
   useEffect(() => {
     const handler = (e) => {
