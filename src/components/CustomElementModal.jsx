@@ -10,14 +10,12 @@ const CATEGORIES = [
 
 const SVG_W = 420;
 const SVG_H = 300;
-const PX_PER_M = 20;
-const SNAP_M = 0.5;
-const OX = SVG_W / 2;
-const OY = SVG_H / 2;
+const INIT_ZOOM = 20;   // px per meter
+const SNAP_M   = 0.5;
+const MIN_ZOOM = 5;
+const MAX_ZOOM = 100;
 
-const toSvg  = (mx, my) => ({ x: mx * PX_PER_M + OX,  y: my  * PX_PER_M + OY  });
-const toM    = (px, py) => ({ x: (px - OX) / PX_PER_M, y: (py - OY) / PX_PER_M });
-const snap   = (v) => Math.round(v / SNAP_M) * SNAP_M;
+const snap = (v) => Math.round(v / SNAP_M) * SNAP_M;
 
 const angle3 = (prev, vertex, next) => {
   const v1 = { x: prev.x - vertex.x, y: prev.y - vertex.y };
@@ -46,13 +44,42 @@ export default function CustomElementModal({ onSave, onCancel }) {
   const [mouse, setMouse]             = useState(null);
   const [rawMouse, setRawMouse]       = useState(null);
   const [done, setDone]               = useState(false);
+  const [zoom, setZoom]               = useState(INIT_ZOOM);
+  const [origin, setOrigin]           = useState({ x: SVG_W / 2, y: SVG_H / 2 });
   const svgRef = useRef(null);
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  const toSvg = useCallback((mx, my) => ({ x: mx * zoom + origin.x, y: my * zoom + origin.y }), [zoom, origin]);
+  const toM   = useCallback((px, py) => ({ x: (px - origin.x) / zoom, y: (py - origin.y) / zoom }), [zoom, origin]);
 
   const n = points.length;
   const isNearFirst = !done && rawMouse && n >= 3 && (() => {
     const f = toSvg(points[0].x, points[0].y);
     return Math.hypot(rawMouse.x - f.x, rawMouse.y - f.y) < 16;
   })();
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    setZoom(prevZoom => {
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prevZoom * factor));
+      setOrigin(prevOrigin => ({
+        x: px - (px - prevOrigin.x) * (newZoom / prevZoom),
+        y: py - (py - prevOrigin.y) * (newZoom / prevZoom),
+      }));
+      return newZoom;
+    });
+  }, []);
 
   const handleSvgMouseMove = useCallback((e) => {
     if (done) return;
@@ -113,12 +140,12 @@ export default function CustomElementModal({ onSave, onCancel }) {
 
   // Grid lines
   const gridLines = [];
-  for (let x = Math.floor(-OX / PX_PER_M); x <= Math.ceil((SVG_W - OX) / PX_PER_M); x++) {
+  for (let x = Math.floor(-origin.x / zoom); x <= Math.ceil((SVG_W - origin.x) / zoom); x++) {
     const sx = toSvg(x, 0).x;
     gridLines.push(<line key={`gv${x}`} x1={sx} y1={0} x2={sx} y2={SVG_H}
       stroke={x === 0 ? '#bbb' : '#eee'} strokeWidth={x === 0 ? 1 : 0.5} />);
   }
-  for (let y = Math.floor(-OY / PX_PER_M); y <= Math.ceil((SVG_H - OY) / PX_PER_M); y++) {
+  for (let y = Math.floor(-origin.y / zoom); y <= Math.ceil((SVG_H - origin.y) / zoom); y++) {
     const sy = toSvg(0, y).y;
     gridLines.push(<line key={`gh${y}`} x1={0} y1={sy} x2={SVG_W} y2={sy}
       stroke={y === 0 ? '#bbb' : '#eee'} strokeWidth={y === 0 ? 1 : 0.5} />);
@@ -158,7 +185,7 @@ export default function CustomElementModal({ onSave, onCancel }) {
     const l1 = Math.hypot(v1.x, v1.y), l2 = Math.hypot(v2.x, v2.y);
     const bx = v1.x / l1 + v2.x / l2, by = v1.y / l1 + v2.y / l2;
     const bl = Math.hypot(bx, by) || 1;
-    const offset = PX_PER_M * 1.1;
+    const offset = zoom * 1.1;
     angleLabels.push(
       <text key={key} x={sp.x + (bx / bl) * offset} y={sp.y + (by / bl) * offset}
         fontSize={9} fill="#e65100" textAnchor="middle" dominantBaseline="middle"
@@ -259,8 +286,8 @@ export default function CustomElementModal({ onSave, onCancel }) {
           >
             {gridLines}
 
-            <line x1={8} y1={SVG_H - 8} x2={8 + PX_PER_M} y2={SVG_H - 8} stroke="#aaa" strokeWidth={1.5} />
-            <text x={8 + PX_PER_M / 2} y={SVG_H - 16} fontSize={9} fill="#aaa" textAnchor="middle">1 m</text>
+            <line x1={8} y1={SVG_H - 8} x2={8 + zoom} y2={SVG_H - 8} stroke="#aaa" strokeWidth={1.5} />
+            <text x={8 + zoom / 2} y={SVG_H - 16} fontSize={9} fill="#aaa" textAnchor="middle">1 m</text>
 
             {done && n >= 3 && (
               <polygon points={svgPolygonPts} fill={color} stroke={borderColor} strokeWidth={2} />
