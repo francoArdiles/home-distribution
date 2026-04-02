@@ -301,6 +301,12 @@ function App() {
     );
   }, []);
 
+  const handleRenameElement = useCallback((id, newLabel) => {
+    setPlacedElements(prev =>
+      prev.map(el => el.id === id ? { ...el, label: newLabel } : el)
+    );
+  }, []);
+
   const handleOpenDetailPanel = useCallback((id) => {
     setSelectedElementId(id);
     setPlacedElements(prev => {
@@ -374,7 +380,7 @@ function App() {
         const original = placedElements.find(el => el.id === selectedElementId);
         if (original) {
           pushUndo({ placedElements, paths, entrance });
-          const dup = duplicateElement(original, 1, 1);
+          const dup = duplicateElement(original, 1, 1, placedElements.map(e => e.label));
           setPlacedElements(prev => [...prev, dup]);
           setSelectedElementId(dup.id);
         }
@@ -472,6 +478,12 @@ function App() {
           area={area}
           perimeter={perimeter}
           baseScale={baseScale}
+          selectedElement={placedElements.find(e => e.id === selectedElementId) ?? null}
+          selectedPath={paths.find(p => p.id === selectedPathId) ?? null}
+          onRenameElement={handleRenameElement}
+          constraints={measurementConfig.constraints}
+          validationResults={validateAllConstraints(measurementConfig.constraints, placedElements, points, baseScale)}
+          elements={placedElements}
         />
       </div>
       {solarPanelOpen && (

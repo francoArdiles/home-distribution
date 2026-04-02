@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { getConstraintDisplayName } from '../utils/constraintUtils.js';
+import { pathTotalLength } from '../utils/pathUtils.js';
 
 const InfoPanel = ({
   points, finished, area, perimeter, baseScale,
-  selectedElement, onRenameElement,
+  selectedElement, selectedPath, onRenameElement,
   constraints = [], validationResults = [], elements = [],
 }) => {
   const [editingName, setEditingName] = useState(false);
@@ -83,10 +84,31 @@ const InfoPanel = ({
             </div>
           )}
           <div className="mt-2 text-xs text-gray-500 space-y-0.5">
-            <div>Tipo: <span className="text-gray-700">{selectedElement.definitionId}</span></div>
-            <div>Pos: <span className="text-gray-700">
-              {(selectedElement.x / baseScale).toFixed(1)} m, {(selectedElement.y / baseScale).toFixed(1)} m
-            </span></div>
+            {selectedElement.shape === 'circle' ? (
+              <>
+                <div>Diámetro: <span className="text-gray-700">{(selectedElement.radius * 2).toFixed(2)} m</span></div>
+                <div>Área: <span className="text-gray-700">{(Math.PI * selectedElement.radius ** 2).toFixed(2)} m²</span></div>
+              </>
+            ) : (
+              <>
+                <div>Ancho: <span className="text-gray-700">{selectedElement.width.toFixed(2)} m</span></div>
+                <div>Alto: <span className="text-gray-700">{selectedElement.height.toFixed(2)} m</span></div>
+                <div>Área: <span className="text-gray-700">{(selectedElement.width * selectedElement.height).toFixed(2)} m²</span></div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Selected path */}
+      {selectedPath && !selectedElement && (
+        <div className="border-t border-gray-200 pt-3">
+          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1.5">Camino seleccionado</div>
+          <div className="font-semibold text-gray-800 mb-2">{selectedPath.label}</div>
+          <div className="text-xs text-gray-500 space-y-0.5">
+            <div>Longitud total: <span className="text-gray-700">{pathTotalLength(selectedPath).toFixed(2)} m</span></div>
+            <div>Vértices: <span className="text-gray-700">{selectedPath.points.length}</span></div>
+            <div>Grosor: <span className="text-gray-700">{selectedPath.width} m</span></div>
           </div>
         </div>
       )}
