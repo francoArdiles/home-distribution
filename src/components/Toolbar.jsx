@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, onClear, solarVisible, onToggleSolar, onToggleMeasurements, terrainEditMode, onToggleTerrainEdit, entranceMode, onToggleEntrance, onSave, onOpen, onCreateCustomElement }) => {
+const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, onClear, solarVisible, onToggleSolar, onToggleMeasurements, terrainEditMode, onToggleTerrainEdit, entranceMode, onToggleEntrance, onSave, onSaveAs, onOpen, onExportPdf, onCreateCustomElement }) => {
   const canFinish = pointsCount >= 3 && !finished;
 
   return (
@@ -40,11 +40,17 @@ const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, o
       <button className="btn" onClick={onCreateCustomElement} title="Crear un objeto de forma personalizada">
         Crear objeto
       </button>
-      <button className="btn" onClick={onSave} title="Guardar proyecto como archivo JSON">
+      <button className="btn" onClick={onSave} title="Guardar (Ctrl+S)">
         Guardar
+      </button>
+      <button className="btn" onClick={onSaveAs} title="Guardar con otro nombre">
+        Guardar como...
       </button>
       <button className="btn" onClick={onOpen} title="Abrir un proyecto guardado">
         Abrir
+      </button>
+      <button className="btn" onClick={onExportPdf} title="Exportar plano como PDF (A4 apaisado)">
+        Exportar PDF
       </button>
       <button className="btn" onClick={onClear}>
         Limpiar

@@ -76,6 +76,42 @@ export const downloadProject = (state, filename = 'proyecto.hdist.json') => {
   URL.revokeObjectURL(url);
 };
 
+/**
+ * Saves the project to an existing FileSystemFileHandle (File System Access API).
+ * @param {FileSystemFileHandle} handle
+ * @param {object} state
+ */
+export const saveToFileHandle = async (handle, state) => {
+  const json = exportProject(state);
+  const writable = await handle.createWritable();
+  await writable.write(json);
+  await writable.close();
+};
+
+/**
+ * Opens a Save As picker (File System Access API) and writes the project.
+ * Returns the FileSystemFileHandle on success, or null if not supported.
+ * Falls back to downloadProject when the API is unavailable.
+ *
+ * @param {object} state
+ * @param {string} suggestedName - suggested filename without extension
+ * @returns {Promise<FileSystemFileHandle|null>}
+ */
+export const saveProjectAs = async (state, suggestedName = 'proyecto') => {
+  const name = suggestedName.replace(/\.hdist\.json$/, '');
+  if (typeof window.showSaveFilePicker === 'function') {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: `${name}.hdist.json`,
+      types: [{ description: 'Home Distribution Project', accept: { 'application/json': ['.hdist.json', '.json'] } }],
+    });
+    await saveToFileHandle(handle, state);
+    return handle;
+  }
+  // Fallback: browser download
+  downloadProject(state, `${name}.hdist.json`);
+  return null;
+};
+
 // ---------------------------------------------------------------------------
 // Import
 // ---------------------------------------------------------------------------
@@ -157,13 +193,31 @@ export const importProject = (jsonString) => {
 };
 
 /**
- * Opens a file picker and resolves with the parsed project, or rejects with
- * ProjectImportError / native error.
+ * Opens a file picker and resolves with the parsed project plus file metadata.
+ * Uses the File System Access API when available (returns a file handle for
+ * subsequent overwrites), otherwise falls back to a plain <input type=file>.
  *
- * @returns {Promise<ReturnType<importProject>>}
+ * Resolves with: { project, handle, filename }
+ *   - project  : ReturnType<importProject>
+ *   - handle   : FileSystemFileHandle | null
+ *   - filename : string (basename without extension)
+ *
+ * @returns {Promise<{ project, handle, filename }>}
  */
-export const openProjectFile = () =>
-  new Promise((resolve, reject) => {
+export const openProjectFile = async () => {
+  if (typeof window.showOpenFilePicker === 'function') {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'Home Distribution Project', accept: { 'application/json': ['.hdist.json', '.json'] } }],
+    });
+    const file = await handle.getFile();
+    const text = await file.text();
+    const project = importProject(text);
+    const filename = file.name.replace(/\.hdist\.json$|\.json$/, '');
+    return { project, handle, filename };
+  }
+
+  // Fallback: classic <input>
+  return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.hdist.json,application/json';
@@ -173,7 +227,9 @@ export const openProjectFile = () =>
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          resolve(importProject(e.target.result));
+          const project = importProject(e.target.result);
+          const filename = file.name.replace(/\.hdist\.json$|\.json$/, '');
+          resolve({ project, handle: null, filename });
         } catch (err) {
           reject(err);
         }
@@ -183,3 +239,4 @@ export const openProjectFile = () =>
     };
     input.click();
   });
+};

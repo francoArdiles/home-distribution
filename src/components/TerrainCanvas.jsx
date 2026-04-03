@@ -29,8 +29,13 @@ const TerrainCanvas = ({
   onEntranceChange,
   initialPoints = [],
   initialFinished = false,
+  externalStageRef = null,
 }) => {
   const stageRef = useRef(null);
+  // Expose stage to parent when requested
+  useEffect(() => {
+    if (externalStageRef) externalStageRef.current = stageRef.current;
+  }); // run every render so ref stays current after remounts
   const containerRef = useRef(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [points, setPoints] = useState(initialPoints); // array of {x, y} in layer coordinates

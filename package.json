@@ -22,6 +22,7 @@
   "author": "ZeroClaw Assistant",
   "license": "MIT",
   "dependencies": {
+    "jspdf": "^4.2.1",
     "konva": "^9.2.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

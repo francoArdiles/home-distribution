@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import TerrainCanvas from './components/TerrainCanvas.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import InfoPanel from './components/InfoPanel.jsx';
@@ -19,7 +19,8 @@ import PathEditPanel from './components/PathEditPanel.jsx';
 import DetailPanel from './components/DetailPanel.jsx';
 import FloatingPanel from './components/FloatingPanel.jsx';
 import { getDetailSchema, createDefaultDetail } from './utils/detailUtils.js';
-import { downloadProject, openProjectFile, ProjectImportError } from './utils/projectIO.js';
+import { saveToFileHandle, saveProjectAs, openProjectFile, ProjectImportError } from './utils/projectIO.js';
+import { exportToPdf } from './utils/pdfExport.js';
 import useUndoHistory from './utils/useUndoHistory.js';
 import { validateAllConstraints } from './utils/constraintUtils.js';
 import MeasurementToolkit from './components/MeasurementToolkit.jsx';
@@ -45,6 +46,11 @@ function App() {
   const [selectedElementType, setSelectedElementType] = useState(null);
   const [selectedElementId, setSelectedElementId] = useState(null);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
+
+  // Current file tracking for Ctrl+S overwrite
+  const fileHandleRef = useRef(null);
+  const stageRef = useRef(null);
+  const [currentFilename, setCurrentFilename] = useState('proyecto');
 
   // Canvas remount key — increment to force TerrainCanvas to reinitialize (e.g. after project load)
   const [canvasKey, setCanvasKey] = useState(0);
@@ -221,13 +227,57 @@ function App() {
   }, []);
 
   // --- Save / Open ---
-  const handleSave = useCallback(() => {
-    downloadProject({ points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions, paths });
-  }, [points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions, paths]);
+  const getProjectState = useCallback(() => (
+    { points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions, paths }
+  ), [points, finished, entrance, placedElements, solarConfig, measurementConfig, customDefinitions, paths]);
+
+  const handleSave = useCallback(async () => {
+    const state = getProjectState();
+    try {
+      if (fileHandleRef.current) {
+        await saveToFileHandle(fileHandleRef.current, state);
+      } else {
+        const handle = await saveProjectAs(state, currentFilename);
+        if (handle) {
+          fileHandleRef.current = handle;
+          setCurrentFilename(handle.name.replace(/\.hdist\.json$|\.json$/, ''));
+        }
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') console.error(err);
+    }
+  }, [getProjectState, currentFilename]);
+
+  const handleSaveAs = useCallback(async () => {
+    const state = getProjectState();
+    try {
+      const handle = await saveProjectAs(state, currentFilename);
+      if (handle) {
+        fileHandleRef.current = handle;
+        setCurrentFilename(handle.name.replace(/\.hdist\.json$|\.json$/, ''));
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') console.error(err);
+    }
+  }, [getProjectState, currentFilename]);
+
+  const handleExportPdf = useCallback(() => {
+    if (!stageRef.current) return;
+    exportToPdf({
+      stage: stageRef.current,
+      filename: currentFilename,
+      area,
+      perimeter,
+      elements: placedElements,
+      paths,
+    });
+  }, [currentFilename, area, perimeter, placedElements, paths]);
 
   const handleOpen = useCallback(async () => {
     try {
-      const project = await openProjectFile();
+      const { project, handle, filename } = await openProjectFile();
+      fileHandleRef.current = handle;
+      setCurrentFilename(filename);
       // Restore terrain
       setPoints(project.terrain.points);
       setFinished(project.terrain.finished);
@@ -246,6 +296,7 @@ function App() {
       setSelectedPathId(null);
       setCanvasKey(k => k + 1); // remount TerrainCanvas with loaded points
     } catch (err) {
+      if (err?.name === 'AbortError') return;
       if (err instanceof ProjectImportError) {
         alert(`No se pudo abrir el proyecto: ${err.message}`);
       } else {
@@ -351,6 +402,18 @@ function App() {
     );
   }, [pushUndo, takeSnapshot]);
 
+  // Ctrl+S = save
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleSave]);
+
   // Keyboard shortcut: S = toggle solar overlay, M = toggle distance tool
   useEffect(() => {
     const handler = (e) => {
@@ -408,7 +471,9 @@ function App() {
         entranceMode={entranceMode}
         onToggleEntrance={handleToggleEntrance}
         onSave={handleSave}
+        onSaveAs={handleSaveAs}
         onOpen={handleOpen}
+        onExportPdf={handleExportPdf}
         onCreateCustomElement={() => setShowCustomModal(true)}
       />
       <div style={{ display: 'flex', flex: 1, overflowX: 'auto' }}>
@@ -470,6 +535,7 @@ function App() {
             onPathFinish={pathToolActive ? handlePathFinish : null}
             onSelectPath={handleSelectPath}
             onUpdatePath={handleUpdatePath}
+            externalStageRef={stageRef}
           />
         </div>
         <InfoPanel
