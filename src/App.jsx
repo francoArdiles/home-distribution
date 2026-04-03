@@ -418,7 +418,7 @@ function App() {
   useEffect(() => {
     const handler = (e) => {
       if (!finished) return;
-      if (e.key === 's' || e.key === 'S') setSolarVisible(prev => !prev);
+      if (e.shiftKey && (e.key === 's' || e.key === 'S')) setSolarVisible(prev => !prev);
       if (e.key === 'm' || e.key === 'M') {
         setMeasurementConfig(prev =>
           setActiveTool(prev, prev.activeTool === 'distance' ? 'none' : 'distance')
@@ -433,6 +433,8 @@ function App() {
   useEffect(() => {
     const handler = (e) => {
       if (!finished) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId) {
         pushUndo({ placedElements, paths, entrance });
         setPlacedElements(prev => removeElement(prev, selectedElementId));
