@@ -1,10 +1,13 @@
 import React from 'react';
+import { getSectionView } from './sectionViewRegistry.js';
 
 // ---------------------------------------------------------------------------
 // Field renderers
 // ---------------------------------------------------------------------------
 
 function NumberField({ field, value, onChange }) {
+  const step   = field.integer ? 1 : 0.1;
+  const parse  = field.integer ? parseInt : parseFloat;
   return (
     <div className="flex items-center gap-2">
       <input
@@ -13,8 +16,8 @@ function NumberField({ field, value, onChange }) {
         value={value ?? ''}
         min={field.min}
         max={field.max}
-        step={0.1}
-        onChange={(e) => onChange(field.key, parseFloat(e.target.value))}
+        step={step}
+        onChange={(e) => onChange(field.key, parse(e.target.value, 10))}
         className="w-24 border border-gray-300 rounded px-2 py-1 text-sm"
       />
       {field.unit && <span className="text-xs text-gray-500">{field.unit}</span>}
@@ -138,9 +141,41 @@ export default function DetailPanel({ element, schema, onChange, onClose }) {
     onChange({ ...detail, [key]: newList });
   };
 
+  const schemaName  = schema?._schema?.split('@')[0] ?? null;
+  const SectionView = schemaName ? getSectionView(schemaName) : null;
+  const twoColumn   = schema?.layout === 'two-column' && SectionView;
+
+  const fieldsBlock = !schema ? (
+    <p className="text-gray-500 text-xs">Sin detalle disponible para este elemento.</p>
+  ) : (
+    <div className="space-y-3">
+      {schema.fields.map((field) => (
+        <div key={field.key}>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{field.label}</label>
+          {field.type === 'number' && (
+            <NumberField field={field} value={detail[field.key]} onChange={handleFieldChange} />
+          )}
+          {field.type === 'text' && (
+            <TextField field={field} value={detail[field.key]} onChange={handleFieldChange} />
+          )}
+          {field.type === 'select' && (
+            <SelectField field={field} value={detail[field.key]} onChange={handleFieldChange} />
+          )}
+          {field.type === 'boolean' && (
+            <BooleanField field={field} value={detail[field.key]} onChange={handleFieldChange} />
+          )}
+          {field.type === 'list' && (
+            <ListField field={field} value={detail[field.key]} onListChange={handleListChange} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="p-3 min-w-[260px] max-w-xs text-sm">
-      <div className="flex items-center justify-between mb-3">
+    <div className={`text-sm ${twoColumn ? 'min-w-[480px]' : 'p-3 min-w-[260px] max-w-xs'}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
         <span className="font-semibold text-gray-800">{element?.label ?? 'Elemento'}</span>
         <button
           data-testid="detail-panel-close"
@@ -152,30 +187,21 @@ export default function DetailPanel({ element, schema, onChange, onClose }) {
         </button>
       </div>
 
-      {!schema ? (
-        <p className="text-gray-500 text-xs">Sin detalle disponible para este elemento.</p>
+      {twoColumn ? (
+        <div data-testid="detail-layout-two-col" className="flex h-full">
+          {/* Columna de campos — angosta */}
+          <div data-testid="detail-fields-col" className="w-52 shrink-0 p-3 border-r border-gray-100 overflow-y-auto">
+            {fieldsBlock}
+          </div>
+          {/* Columna de vistas — ocupa el espacio restante */}
+          <div data-testid="detail-views-col" className="flex-1 p-3 overflow-auto min-w-0">
+            <SectionView element={element} detail={detail} />
+          </div>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {schema.fields.map((field) => (
-            <div key={field.key}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{field.label}</label>
-              {field.type === 'number' && (
-                <NumberField field={field} value={detail[field.key]} onChange={handleFieldChange} />
-              )}
-              {field.type === 'text' && (
-                <TextField field={field} value={detail[field.key]} onChange={handleFieldChange} />
-              )}
-              {field.type === 'select' && (
-                <SelectField field={field} value={detail[field.key]} onChange={handleFieldChange} />
-              )}
-              {field.type === 'boolean' && (
-                <BooleanField field={field} value={detail[field.key]} onChange={handleFieldChange} />
-              )}
-              {field.type === 'list' && (
-                <ListField field={field} value={detail[field.key]} onListChange={handleListChange} />
-              )}
-            </div>
-          ))}
+        <div className="p-3">
+          {SectionView && <SectionView element={element} detail={detail} />}
+          {fieldsBlock}
         </div>
       )}
     </div>
