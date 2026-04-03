@@ -15,7 +15,7 @@ const PAGE_H = 210; // A4 landscape height
  * @param {Array}   options.elements   - placed elements array
  * @param {Array}   options.paths      - placed paths array
  */
-export const exportToPdf = ({ stage, filename = 'proyecto', area, perimeter, elements = [], paths = [] }) => {
+export const exportToPdf = async ({ stage, filename = 'proyecto', area, perimeter, elements = [], paths = [] }) => {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -45,7 +45,19 @@ export const exportToPdf = ({ stage, filename = 'proyecto', area, perimeter, ele
   stats.forEach((line, i) => pdf.text(line, MARGIN, summaryY + 6 + i * 5));
 
   // ── Canvas image ──────────────────────────────────────────────────────────
-  const imgData = stage.toDataURL({ pixelRatio: 2, mimeType: 'image/jpeg', quality: 0.92 });
+  // Konva's toDataURL uses JPEG which fills transparency with black.
+  // Composite onto a white canvas first to get a proper white background.
+  const rawDataUrl = stage.toDataURL({ pixelRatio: 2 });
+  const offscreen = document.createElement('canvas');
+  offscreen.width = stage.width() * 2;
+  offscreen.height = stage.height() * 2;
+  const ctx = offscreen.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+  const img = new Image();
+  await new Promise((resolve) => { img.onload = resolve; img.src = rawDataUrl; });
+  ctx.drawImage(img, 0, 0);
+  const imgData = offscreen.toDataURL('image/jpeg', 0.92);
 
   // Available area for the canvas image (below header, right of summary)
   const summaryBlockW = 60; // mm reserved for left summary column
