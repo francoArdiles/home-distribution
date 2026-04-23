@@ -91,6 +91,7 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [proposalsPanelOpen, setProposalsPanelOpen] = useState(false);
   const [proposalBackup, setProposalBackup] = useState(null);
+  const [solverAlgorithm, setSolverAlgorithm] = useState('sa');
   const { solve: solveMultiRun, cancel: cancelMultiRun, progress: multiRunProgress, isRunning: multiRunIsRunning } = useLayoutSolver();
 
   const handleStartPath = useCallback(() => {
@@ -554,7 +555,10 @@ function App() {
         scoreFactor: 2,
         seedBase: Date.now() & 0xffff,
         entrance: entrancePt,
-        config: { T0: 50, alpha: 0.95, itersPerT: 200, Tmin: 0.1, maxTimeMs: 3000 },
+        algorithm: solverAlgorithm,
+        config: solverAlgorithm === 'ga'
+          ? { populationSize: 24, generations: 60, maxTimeMs: 3000 }
+          : { T0: 50, alpha: 0.95, itersPerT: 200, Tmin: 0.1, maxTimeMs: 3000 },
       });
       const generated = results.map(r => ({
         id: generateId(),
@@ -570,7 +574,7 @@ function App() {
     } catch (err) {
       if (err?.message !== 'cancelled') console.error('solve error', err);
     }
-  }, [finished, placedElements, points, selectedProposalId, restoreBackupInline, buildSolverContext, computeEntrancePointMeters, solveMultiRun]);
+  }, [finished, placedElements, points, selectedProposalId, restoreBackupInline, buildSolverContext, computeEntrancePointMeters, solveMultiRun, solverAlgorithm]);
 
   const handleSelectProposal = useCallback((id) => {
     const p = proposals.find(x => x.id === id);
@@ -790,6 +794,8 @@ function App() {
           onIterate={handleIterateProposal}
           onGenerate={handleGenerateProposals}
           onClose={handleCloseProposals}
+          algorithm={solverAlgorithm}
+          onAlgorithmChange={setSolverAlgorithm}
         />
       )}
       {detailPanelOpen && selectedElementId && finished && (() => {

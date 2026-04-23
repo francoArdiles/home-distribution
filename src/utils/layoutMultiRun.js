@@ -1,5 +1,13 @@
 import { solveSA, randomInitialLayout, perturbedLayout, mulberry32, DEFAULT_SA_CONFIG } from './layoutSolver.js';
+import { solveGA, DEFAULT_GA_CONFIG } from './layoutGA.js';
 import { diversityDistance } from './layoutDiversity.js';
+
+export const SUPPORTED_ALGORITHMS = ['sa', 'ga'];
+
+const solverFor = (algorithm) => {
+  if (algorithm === 'ga') return { solve: solveGA, defaults: DEFAULT_GA_CONFIG };
+  return { solve: solveSA, defaults: DEFAULT_SA_CONFIG };
+};
 
 export const runMultiRun = (payload, onProgress) => {
   const {
@@ -14,8 +22,10 @@ export const runMultiRun = (payload, onProgress) => {
     config = {},
     seedBase = 1000,
     entrancePoint = null,
+    algorithm = 'sa',
   } = payload;
 
+  const { solve, defaults } = solverFor(algorithm);
   const context = { terrainMeters, constraints, weights, entrancePoint };
   const runs = [];
   // Seeding strategy:
@@ -40,8 +50,8 @@ export const runMultiRun = (payload, onProgress) => {
     } else {
       initial = randomInitialLayout(elements, terrainMeters, rng);
     }
-    const saConfig = { ...DEFAULT_SA_CONFIG, ...config, seed };
-    const result = solveSA(initial, context, saConfig);
+    const runConfig = { ...defaults, ...config, seed };
+    const result = solve(initial, context, runConfig);
     runs.push({ layout: result.best, score: result.bestScore });
     if (onProgress) {
       const bestSoFar = runs.reduce((m, r) => Math.min(m, r.score), Infinity);

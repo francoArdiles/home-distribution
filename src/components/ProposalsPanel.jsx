@@ -71,6 +71,8 @@ const ProposalsPanel = ({
   onGenerate,
   onCancel,
   onClose,
+  algorithm = 'sa',
+  onAlgorithmChange,
 }) => {
   return (
     <FloatingPanel
@@ -80,6 +82,19 @@ const ProposalsPanel = ({
       onClose={onClose}
     >
       <div className="p-3 text-sm">
+        <label className="flex items-center gap-2 mb-2 text-xs text-gray-700">
+          <span>Algoritmo:</span>
+          <select
+            value={algorithm}
+            onChange={(e) => onAlgorithmChange?.(e.target.value)}
+            disabled={isGenerating}
+            data-testid="algorithm-select"
+            className="form-select text-xs py-0.5"
+          >
+            <option value="sa">Simulated Annealing</option>
+            <option value="ga">Algoritmo Genético</option>
+          </select>
+        </label>
         <div className="flex items-center gap-2 mb-3">
           <button
             onClick={onGenerate}
