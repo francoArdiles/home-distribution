@@ -12,6 +12,7 @@ const sourceLabel = (sourceId, elements) => {
 const targetLabel = (targetId, elements) => {
   if (targetId === 'terrain') return 'Límite del terreno';
   if (targetId === 'any') return 'Cualquier otro elemento';
+  if (targetId === 'entrance') return 'Entrada del terreno';
   const el = elements.find(e => e.id === targetId);
   return el ? (el.label || el.definitionId) : targetId;
 };
@@ -27,6 +28,7 @@ const ConstraintPanel = ({
   const [formSource, setFormSource] = useState('');
   const [formTarget, setFormTarget] = useState('terrain');
   const [formValue, setFormValue] = useState('3');
+  const [formType, setFormType] = useState('min-distance');
 
   const getResult = (id) => validationResults.find(r => r.constraint?.id === id);
 
@@ -38,12 +40,13 @@ const ConstraintPanel = ({
 
     const srcLabel = sourceLabel(formSource, elements);
     const tgtLabel = targetLabel(formTarget, elements);
-    const name = `${srcLabel} → ${tgtLabel} (mín. ${distance}m)`;
+    const prefix = formType === 'max-distance' ? 'máx.' : 'mín.';
+    const name = `${srcLabel} → ${tgtLabel} (${prefix} ${distance}m)`;
 
     onAddConstraint?.({
       id: generateId(),
       name,
-      type: 'min-distance',
+      type: formType,
       sourceId: formSource,
       targetId: formTarget,
       value: distance,
@@ -52,6 +55,7 @@ const ConstraintPanel = ({
     setFormSource('');
     setFormTarget('terrain');
     setFormValue('3');
+    setFormType('min-distance');
   };
 
   const handleApplyDefaults = () => {
@@ -91,7 +95,7 @@ const ConstraintPanel = ({
                 {getConstraintDisplayName(c, elements)}
                 {result && !result.valid && (
                   <span className="text-red-500 text-xs ml-1">
-                    ({result.actualDistance?.toFixed(1)}m / mín. {result.requiredDistance}m)
+                    ({result.actualDistance?.toFixed(1)}m / {c.type === 'max-distance' ? 'máx.' : 'mín.'} {result.requiredDistance}m)
                   </span>
                 )}
               </span>
@@ -134,6 +138,7 @@ const ConstraintPanel = ({
             className="form-select"
           >
             <option value="terrain">Límite del terreno</option>
+            <option value="entrance">Entrada del terreno</option>
             <option value="any">Cualquier otro elemento</option>
             {elements
               .filter(el => el.id !== formSource)
@@ -146,7 +151,21 @@ const ConstraintPanel = ({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="form-label">Distancia mínima (m)</span>
+          <span className="form-label">Tipo</span>
+          <select
+            value={formType}
+            onChange={e => setFormType(e.target.value)}
+            className="form-select"
+          >
+            <option value="min-distance">Distancia mínima</option>
+            <option value="max-distance">Distancia máxima</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="form-label">
+            {formType === 'max-distance' ? 'Distancia máxima (m)' : 'Distancia mínima (m)'}
+          </span>
           <input
             type="number"
             min="0.1"

@@ -130,8 +130,12 @@ function ListField({ field, value = [], onListChange }) {
  *   onChange — (newDetail) => void
  *   onClose  — () => void
  */
-export default function DetailPanel({ element, schema, onChange, onClose }) {
+export default function DetailPanel({ element, schema, onChange, onChangeProperties, onToggleLocked, onClose }) {
   const detail = element?.detail ?? {};
+  const properties = element?.properties ?? {};
+  const pathMode = properties.pathMode ?? 'hub';
+  const clusterId = properties.clusterId ?? '';
+  const locked = element?.locked === true;
 
   const handleFieldChange = (key, value) => {
     onChange({ ...detail, [key]: value });
@@ -141,14 +145,73 @@ export default function DetailPanel({ element, schema, onChange, onClose }) {
     onChange({ ...detail, [key]: newList });
   };
 
+  const handlePathModeChange = (value) => {
+    if (!onChangeProperties) return;
+    const next = { ...properties, pathMode: value };
+    if (value !== 'cluster') delete next.clusterId;
+    onChangeProperties(next);
+  };
+
+  const handleClusterIdChange = (value) => {
+    if (!onChangeProperties) return;
+    onChangeProperties({ ...properties, clusterId: value });
+  };
+
+  const pathBlock = onChangeProperties ? (
+    <div className="space-y-2 pb-2 mb-2 border-b border-gray-100">
+      {onToggleLocked && (
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <input
+            type="checkbox"
+            data-testid="locked-checkbox"
+            checked={locked}
+            onChange={(e) => onToggleLocked(e.target.checked)}
+            className="accent-blue-600"
+          />
+          <span>Fijar posición (no mover por sugerencias)</span>
+        </label>
+      )}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Camino</label>
+        <select
+          data-testid="path-mode-select"
+          value={pathMode}
+          onChange={(e) => handlePathModeChange(e.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+        >
+          <option value="hub">Hasta el hub</option>
+          <option value="cluster">En grupo</option>
+          <option value="none">Sin camino</option>
+        </select>
+      </div>
+      {pathMode === 'cluster' && (
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Grupo</label>
+          <input
+            type="text"
+            data-testid="cluster-id-input"
+            value={clusterId}
+            placeholder="p. ej. arboles"
+            onChange={(e) => handleClusterIdChange(e.target.value)}
+            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+          />
+        </div>
+      )}
+    </div>
+  ) : null;
+
   const schemaName  = schema?._schema?.split('@')[0] ?? null;
   const SectionView = schemaName ? getSectionView(schemaName) : null;
   const twoColumn   = schema?.layout === 'two-column' && SectionView;
 
   const fieldsBlock = !schema ? (
-    <p className="text-gray-500 text-xs">Sin detalle disponible para este elemento.</p>
+    <div>
+      {pathBlock}
+      <p className="text-gray-500 text-xs">Sin detalle disponible para este elemento.</p>
+    </div>
   ) : (
     <div className="space-y-3">
+      {pathBlock}
       {schema.fields.map((field) => (
         <div key={field.key}>
           <label className="block text-xs font-medium text-gray-600 mb-1">{field.label}</label>
@@ -195,12 +258,12 @@ export default function DetailPanel({ element, schema, onChange, onClose }) {
           </div>
           {/* Columna de vistas — ocupa el espacio restante */}
           <div data-testid="detail-views-col" className="flex-1 p-3 overflow-auto min-w-0">
-            <SectionView element={element} detail={detail} />
+            <SectionView element={element} detail={detail} onChange={onChange} />
           </div>
         </div>
       ) : (
         <div className="p-3">
-          {SectionView && <SectionView element={element} detail={detail} />}
+          {SectionView && <SectionView element={element} detail={detail} onChange={onChange} />}
           {fieldsBlock}
         </div>
       )}

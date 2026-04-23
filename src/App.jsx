@@ -26,6 +26,11 @@ import { validateAllConstraints } from './utils/constraintUtils.js';
 import MeasurementToolkit from './components/MeasurementToolkit.jsx';
 import ConstraintPanel from './components/ConstraintPanel.jsx';
 import CustomElementModal from './components/CustomElementModal.jsx';
+import ProposalsPanel from './components/ProposalsPanel.jsx';
+import { solveSA, randomInitialLayout, mulberry32 } from './utils/layoutSolver.js';
+import { useLayoutSolver } from './hooks/useLayoutSolver.js';
+import { generatePaths as autoGeneratePaths } from './utils/pathGenerator.js';
+import { DEFAULT_WEIGHTS } from './utils/layoutFitness.js';
 
 const baseScale = 10;
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -79,6 +84,14 @@ function App() {
   const [pathWidth, setPathWidth] = useState(1);
   const [pathToolActive, setPathToolActive] = useState(false);
   const [selectedPathId, setSelectedPathId] = useState(null);
+
+  // Auto-distribution proposals state
+  const [proposals, setProposals] = useState([]);
+  const [selectedProposalId, setSelectedProposalId] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [proposalsPanelOpen, setProposalsPanelOpen] = useState(false);
+  const [proposalBackup, setProposalBackup] = useState(null);
+  const { solve: solveMultiRun, cancel: cancelMultiRun, progress: multiRunProgress, isRunning: multiRunIsRunning } = useLayoutSolver();
 
   const handleStartPath = useCallback(() => {
     setPathToolActive(true);
@@ -381,6 +394,20 @@ function App() {
     );
   }, [pushUndo, takeSnapshot]);
 
+  const handleUpdateElementProperties = useCallback((id, newProps) => {
+    pushUndo(takeSnapshot());
+    setPlacedElements(prev =>
+      prev.map(el => el.id === id ? { ...el, properties: newProps } : el)
+    );
+  }, [pushUndo, takeSnapshot]);
+
+  const handleToggleElementLocked = useCallback((id, locked) => {
+    pushUndo(takeSnapshot());
+    setPlacedElements(prev =>
+      prev.map(el => el.id === id ? { ...el, locked } : el)
+    );
+  }, [pushUndo, takeSnapshot]);
+
   const handleMoveElement = useCallback((id, x, y) => {
     pushUndo(takeSnapshot());
     setPlacedElements(prev =>
@@ -455,6 +482,163 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [finished, selectedElementId, placedElements, paths, entrance, pushUndo]);
 
+  // ---------- Auto-distribution handlers ----------
+
+  const computeEntrancePointMeters = useCallback(() => {
+    if (!entrance || !points[entrance.edgeIndex]) return null;
+    const p1 = points[entrance.edgeIndex];
+    const p2 = points[(entrance.edgeIndex + 1) % points.length];
+    const t = entrance.position ?? 0.5;
+    return {
+      x: (p1.x + (p2.x - p1.x) * t) / baseScale,
+      y: (p1.y + (p2.y - p1.y) * t) / baseScale,
+      width: entrance.width ?? null,
+    };
+  }, [entrance, points]);
+
+  const buildSolverContext = useCallback(() => ({
+    terrainMeters: points.map(p => ({ x: p.x / baseScale, y: p.y / baseScale })),
+    constraints: measurementConfig.constraints,
+    weights: DEFAULT_WEIGHTS,
+    entrancePoint: computeEntrancePointMeters(),
+  }), [points, measurementConfig.constraints, computeEntrancePointMeters]);
+
+  const runSingleProposal = useCallback((seed, context, seedLayout) => {
+    const rng = mulberry32(seed);
+    const initial = seedLayout || randomInitialLayout(placedElements, context.terrainMeters, rng);
+    const result = solveSA(initial, context, { seed, maxTimeMs: 3000 });
+    const entrancePt = computeEntrancePointMeters();
+    const autoPaths = autoGeneratePaths(result.best, context.terrainMeters, {
+      entrance: entrancePt,
+    });
+    return {
+      id: generateId(),
+      createdAt: Date.now(),
+      score: result.bestScore,
+      elements: result.best.elements,
+      paths: autoPaths,
+      constraintReport: validateAllConstraints(
+        context.constraints,
+        result.best.elements,
+        points,
+        baseScale,
+        entrancePt,
+      ),
+    };
+  }, [placedElements, points, computeEntrancePointMeters]);
+
+
+  const restoreBackupInline = useCallback(() => {
+    if (proposalBackup) {
+      setPlacedElements(proposalBackup.elements);
+      setPaths(proposalBackup.paths);
+      setProposalBackup(null);
+    }
+    setSelectedProposalId(null);
+  }, [proposalBackup]);
+
+  const handleGenerateProposals = useCallback(async () => {
+    if (!finished || placedElements.length === 0) return;
+    if (selectedProposalId) restoreBackupInline();
+    const context = buildSolverContext();
+    const entrancePt = computeEntrancePointMeters();
+    try {
+      const results = await solveMultiRun({
+        elements: placedElements,
+        terrainMeters: context.terrainMeters,
+        constraints: context.constraints,
+        weights: context.weights,
+        numRuns: 8,
+        maxPicks: 5,
+        minDiversity: 3,
+        scoreFactor: 2,
+        seedBase: Date.now() & 0xffff,
+        entrance: entrancePt,
+        config: { T0: 50, alpha: 0.95, itersPerT: 200, Tmin: 0.1, maxTimeMs: 3000 },
+      });
+      const generated = results.map(r => ({
+        id: generateId(),
+        createdAt: Date.now(),
+        score: r.score,
+        elements: r.layout.elements,
+        paths: r.paths,
+        constraintReport: validateAllConstraints(
+          context.constraints, r.layout.elements, points, baseScale, entrancePt,
+        ),
+      }));
+      setProposals(prev => [...prev, ...generated].sort((a, b) => a.score - b.score).slice(0, 8));
+    } catch (err) {
+      if (err?.message !== 'cancelled') console.error('solve error', err);
+    }
+  }, [finished, placedElements, points, selectedProposalId, restoreBackupInline, buildSolverContext, computeEntrancePointMeters, solveMultiRun]);
+
+  const handleSelectProposal = useCallback((id) => {
+    const p = proposals.find(x => x.id === id);
+    if (!p) return;
+    if (!proposalBackup) {
+      setProposalBackup({ elements: placedElements, paths });
+    }
+    setPlacedElements(p.elements);
+    setPaths(p.paths);
+    setSelectedProposalId(id);
+  }, [proposals, proposalBackup, placedElements, paths]);
+
+  const restoreBackup = useCallback(() => {
+    if (proposalBackup) {
+      setPlacedElements(proposalBackup.elements);
+      setPaths(proposalBackup.paths);
+      setProposalBackup(null);
+    }
+    setSelectedProposalId(null);
+  }, [proposalBackup]);
+
+  const handleAcceptProposal = useCallback((id) => {
+    const p = proposals.find(x => x.id === id);
+    if (!p) return;
+    const snap = proposalBackup || { placedElements, paths, entrance };
+    pushUndo({ placedElements: snap.elements || snap.placedElements, paths: snap.paths, entrance });
+    setPlacedElements(p.elements);
+    setPaths(p.paths);
+    setProposals([]);
+    setSelectedProposalId(null);
+    setProposalBackup(null);
+  }, [proposals, proposalBackup, placedElements, paths, entrance, pushUndo]);
+
+  const handleDiscardProposal = useCallback((id) => {
+    if (selectedProposalId === id) restoreBackup();
+    setProposals(prev => prev.filter(x => x.id !== id));
+  }, [selectedProposalId, restoreBackup]);
+
+  const handleIterateProposal = useCallback(async (id) => {
+    const p = proposals.find(x => x.id === id);
+    if (!p) return;
+    setIsGenerating(true);
+    await new Promise(r => setTimeout(r, 0));
+    try {
+      const context = buildSolverContext();
+      const next = runSingleProposal(Date.now() & 0xffff, context, { elements: p.elements });
+      next.id = id;
+      setProposals(prev => prev.map(x => x.id === id ? next : x));
+      if (selectedProposalId === id) {
+        setPlacedElements(next.elements);
+        setPaths(next.paths);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [proposals, buildSolverContext, runSingleProposal, selectedProposalId]);
+
+  const handleToggleProposals = useCallback(() => {
+    setProposalsPanelOpen(prev => {
+      if (prev && selectedProposalId) restoreBackup();
+      return !prev;
+    });
+  }, [selectedProposalId, restoreBackup]);
+
+  const handleCloseProposals = useCallback(() => {
+    restoreBackup();
+    setProposalsPanelOpen(false);
+  }, [restoreBackup]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
@@ -477,6 +661,7 @@ function App() {
         onOpen={handleOpen}
         onExportPdf={handleExportPdf}
         onCreateCustomElement={() => setShowCustomModal(true)}
+        onToggleProposals={handleToggleProposals}
       />
       <div style={{ display: 'flex', flex: 1, overflowX: 'auto' }}>
         {finished && (
@@ -550,7 +735,7 @@ function App() {
           selectedPath={paths.find(p => p.id === selectedPathId) ?? null}
           onRenameElement={handleRenameElement}
           constraints={measurementConfig.constraints}
-          validationResults={validateAllConstraints(measurementConfig.constraints, placedElements, points, baseScale)}
+          validationResults={validateAllConstraints(measurementConfig.constraints, placedElements, points, baseScale, computeEntrancePointMeters())}
           elements={placedElements}
         />
       </div>
@@ -587,9 +772,25 @@ function App() {
             onAddConstraint={handleAddConstraint}
             onRemoveConstraint={handleRemoveConstraint}
             onToggleConstraint={handleToggleConstraint}
-            validationResults={validateAllConstraints(measurementConfig.constraints, placedElements, points, baseScale)}
+            validationResults={validateAllConstraints(measurementConfig.constraints, placedElements, points, baseScale, computeEntrancePointMeters())}
           />
         </FloatingPanel>
+      )}
+      {proposalsPanelOpen && finished && (
+        <ProposalsPanel
+          proposals={proposals}
+          selectedProposalId={selectedProposalId}
+          isGenerating={isGenerating || multiRunIsRunning}
+          progress={multiRunProgress}
+          onCancel={cancelMultiRun}
+          terrainMeters={points.map(p => ({ x: p.x / baseScale, y: p.y / baseScale }))}
+          onSelect={handleSelectProposal}
+          onAccept={handleAcceptProposal}
+          onDiscard={handleDiscardProposal}
+          onIterate={handleIterateProposal}
+          onGenerate={handleGenerateProposals}
+          onClose={handleCloseProposals}
+        />
       )}
       {detailPanelOpen && selectedElementId && finished && (() => {
         const el = placedElements.find(e => e.id === selectedElementId) ?? null;
@@ -604,6 +805,8 @@ function App() {
               element={el}
               schema={schema}
               onChange={(newDetail) => handleUpdateElementDetail(selectedElementId, newDetail)}
+              onChangeProperties={(newProps) => handleUpdateElementProperties(selectedElementId, newProps)}
+              onToggleLocked={(locked) => handleToggleElementLocked(selectedElementId, locked)}
               onClose={() => setDetailPanelOpen(false)}
             />
           </FloatingPanel>

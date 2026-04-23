@@ -53,6 +53,11 @@ describe('getConstraintDisplayName — dynamic derivation', () => {
     const c = { ...base, value: 1.5, sourceId: 'el-1', targetId: 'terrain' };
     expect(getConstraintDisplayName(c, elements)).toContain('1.5m');
   });
+
+  test('max-distance label uses "max." prefix', () => {
+    const c = { ...base, type: 'max-distance', value: 20, sourceId: 'el-1', targetId: 'el-2' };
+    expect(getConstraintDisplayName(c, elements)).toBe('Casa → Huerto (máx. 20m)');
+  });
 });
 
 // ── Fallback for backward compat ────────────────────────────────────────────

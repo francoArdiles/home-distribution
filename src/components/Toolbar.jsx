@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, onClear, solarVisible, onToggleSolar, onToggleMeasurements, terrainEditMode, onToggleTerrainEdit, entranceMode, onToggleEntrance, onSave, onSaveAs, onOpen, onExportPdf, onCreateCustomElement }) => {
+const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, onClear, solarVisible, onToggleSolar, onToggleMeasurements, terrainEditMode, onToggleTerrainEdit, entranceMode, onToggleEntrance, onSave, onSaveAs, onOpen, onExportPdf, onCreateCustomElement, onToggleProposals }) => {
   const canFinish = pointsCount >= 3 && !finished;
 
   return (
@@ -35,6 +35,11 @@ const Toolbar = ({ pointsCount, finished, gridVisible, onFinish, onToggleGrid, o
       {finished && (
         <button className="btn" onClick={onToggleMeasurements}>
           Medidas
+        </button>
+      )}
+      {finished && (
+        <button className="btn" onClick={onToggleProposals} title="Sugerir distribuciones automáticas">
+          Sugerir
         </button>
       )}
       <button className="btn" onClick={onCreateCustomElement} title="Crear un objeto de forma personalizada">

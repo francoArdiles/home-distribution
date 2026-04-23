@@ -1,4 +1,4 @@
-import { distanceElementToElement, distanceElementToTerrain } from './distanceUtils.js';
+import { distanceElementToElement, distanceElementToTerrain, distanceElementToPoint } from './distanceUtils.js';
 
 // ---------------------------------------------------------------------------
 // Display name helpers
@@ -11,6 +11,7 @@ const SOURCE_LABELS = {
 const TARGET_LABELS = {
   terrain: 'Límite del terreno',
   any: 'Cualquier otro elemento',
+  entrance: 'Entrada del terreno',
 };
 
 /**
@@ -23,14 +24,17 @@ const TARGET_LABELS = {
  * @param {Array<{id, label}>} elements
  * @returns {string}
  */
+const prefixFor = (type) => (type === 'max-distance' ? 'máx.' : 'mín.');
+
 export const getConstraintDisplayName = (constraint, elements) => {
-  const { sourceId, targetId, value, name } = constraint;
+  const { sourceId, targetId, value, name, type } = constraint;
+  const prefix = prefixFor(type);
 
   const srcEl = elements.find(e => e.id === sourceId);
   const srcLabel = srcEl?.label ?? SOURCE_LABELS[sourceId];
 
   // If source cannot be resolved, fall back to stored name
-  if (!srcLabel) return name || `Restricción (mín. ${value}m)`;
+  if (!srcLabel) return name || `Restricción (${prefix} ${value}m)`;
 
   let tgtLabel;
   if (TARGET_LABELS[targetId]) {
@@ -39,11 +43,11 @@ export const getConstraintDisplayName = (constraint, elements) => {
     const tgtEl = elements.find(e => e.id === targetId);
     tgtLabel = tgtEl?.label;
     // If target element ID not found, fall back to stored name
-    if (!tgtLabel) return name || `${srcLabel} (mín. ${value}m)`;
+    if (!tgtLabel) return name || `${srcLabel} (${prefix} ${value}m)`;
   }
 
   const valueStr = Number.isInteger(value) ? `${value}` : `${value}`;
-  return `${srcLabel} → ${tgtLabel} (mín. ${valueStr}m)`;
+  return `${srcLabel} → ${tgtLabel} (${prefix} ${valueStr}m)`;
 };
 
 /**
@@ -57,7 +61,7 @@ export const getConstraintDisplayName = (constraint, elements) => {
 export const refreshConstraintNames = (constraints, elements) =>
   constraints.map(c => ({ ...c, name: getConstraintDisplayName(c, elements) }));
 
-export const validateConstraint = (constraint, elements, terrainPoints, baseScale) => {
+export const validateConstraint = (constraint, elements, terrainPoints, baseScale, entrancePoint = null) => {
   if (!constraint.enabled) {
     return { valid: true, actualDistance: Infinity, requiredDistance: constraint.value };
   }
@@ -68,6 +72,9 @@ export const validateConstraint = (constraint, elements, terrainPoints, baseScal
   let actualDistance;
   if (constraint.targetId === 'terrain') {
     actualDistance = distanceElementToTerrain(source, terrainPoints, baseScale);
+  } else if (constraint.targetId === 'entrance') {
+    if (!entrancePoint) return { valid: true, actualDistance: Infinity, requiredDistance: constraint.value };
+    actualDistance = distanceElementToPoint(source, entrancePoint);
   } else if (constraint.targetId === 'any') {
     // Minimum distance from source to ALL other elements
     const others = elements.filter(e => e.id !== constraint.sourceId);
@@ -79,17 +86,22 @@ export const validateConstraint = (constraint, elements, terrainPoints, baseScal
     actualDistance = distanceElementToElement(source, target);
   }
 
+  const isMax = constraint.type === 'max-distance';
+  const valid = isMax
+    ? actualDistance <= constraint.value
+    : actualDistance >= constraint.value;
+
   return {
-    valid: actualDistance >= constraint.value,
+    valid,
     actualDistance,
     requiredDistance: constraint.value,
   };
 };
 
-export const validateAllConstraints = (constraints, elements, terrainPoints, baseScale) => {
+export const validateAllConstraints = (constraints, elements, terrainPoints, baseScale, entrancePoint = null) => {
   return constraints.map(constraint => ({
     constraint,
-    ...validateConstraint(constraint, elements, terrainPoints, baseScale),
+    ...validateConstraint(constraint, elements, terrainPoints, baseScale, entrancePoint),
   }));
 };
 
