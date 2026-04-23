@@ -48,7 +48,7 @@ describe('createDefaultDetail', () => {
 
   test('creates detail with default values for casa', () => {
     const detail = createDefaultDetail('casa');
-    expect(detail._schema).toBe('casa@1');
+    expect(detail._schema).toBe('casa@2');
     expect(typeof detail.floors).toBe('number');
   });
 

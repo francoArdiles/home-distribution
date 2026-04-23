@@ -1,6 +1,6 @@
 export default {
   _schema: 'casa',
-  version: 1,
+  version: 2,
   layout: 'two-column',
   fields: [
     { key: 'floors',       label: 'Pisos',          type: 'number', unit: '', min: 1,  max: 5,  integer: true },
@@ -14,5 +14,14 @@ export default {
     ]},
     { key: 'notes',        label: 'Notas',          type: 'text' },
   ],
-  defaults: { floors: 1, bedrooms: 3, bathrooms: 1, roofType: 'a dos aguas', construction: 'hormigón', notes: '' },
+  defaults: {
+    floors: 1,
+    bedrooms: 3,
+    bathrooms: 1,
+    roofType: 'a dos aguas',
+    construction: 'hormigón',
+    notes: '',
+    walls: [],
+    labels: [],
+  },
 };

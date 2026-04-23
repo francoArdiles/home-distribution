@@ -37,7 +37,7 @@ describe('Detail panel initializes detail on first open', () => {
 
   test('createDefaultDetail produces correct schema tag for casa', () => {
     const detail = createDefaultDetail('casa');
-    expect(detail._schema).toBe('casa@1');
+    expect(detail._schema).toBe('casa@2');
   });
 });
 
