@@ -28,31 +28,46 @@ export const runMultiRun = (payload, onProgress) => {
   const { solve, defaults } = solverFor(algorithm);
   const context = { terrainMeters, constraints, weights, entrancePoint };
   const runs = [];
-  // Seeding strategy:
-  //   run 0: user's layout verbatim (strong starting point),
-  //   runs 1..numRuns-3: perturb user's layout with increasing sigma,
-  //   last 2 runs: full random (diversification).
+  // Seeding strategy depends on algorithm.
+  // SA is inherently exploratory (temperature) so it benefits from
+  // perturbations of the user's layout as starting points.
+  // GA is exploitative and collapses populations, so we push much more
+  // random seeds so different runs find different basins.
   const seedingFor = (i) => {
     if (i === 0) return 'verbatim';
+    if (algorithm === 'ga') {
+      // 1 verbatim, 2 perturbed, rest random.
+      if (i <= 2) return 'perturbed';
+      return 'random';
+    }
     if (i >= numRuns - 2) return 'random';
     return 'perturbed';
   };
   for (let i = 0; i < numRuns; i++) {
-    const seed = seedBase + i;
+    const seed = seedBase + i * 1009;
     const rng = mulberry32(seed);
     const mode = seedingFor(i);
     let initial;
     if (mode === 'verbatim') {
       initial = { elements: elements.map(el => ({ ...el })) };
     } else if (mode === 'perturbed') {
-      const sigmaFraction = 0.05 + 0.03 * i;
+      const sigmaFraction = 0.08 + 0.08 * i;
       initial = perturbedLayout(elements, terrainMeters, rng, sigmaFraction);
     } else {
       initial = randomInitialLayout(elements, terrainMeters, rng);
     }
     const runConfig = { ...defaults, ...config, seed };
     const result = solve(initial, context, runConfig);
-    runs.push({ layout: result.best, score: result.bestScore });
+    // If the solver produced a set of distinct finalists (e.g., GA's
+    // final population), contribute all of them as candidates so that
+    // downstream diversity filtering has real variety to choose from.
+    if (Array.isArray(result.finalists) && result.finalists.length > 0) {
+      for (const f of result.finalists) {
+        runs.push({ layout: f.layout, score: f.score });
+      }
+    } else {
+      runs.push({ layout: result.best, score: result.bestScore });
+    }
     if (onProgress) {
       const bestSoFar = runs.reduce((m, r) => Math.min(m, r.score), Infinity);
       onProgress({ done: i + 1, total: numRuns, bestSoFar });

@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { solveGA, DEFAULT_GA_CONFIG } from '../layoutGA.js';
+import { diversityDistance } from '../layoutDiversity.js';
 
 const squareTerrain = [
   { x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }, { x: 0, y: 30 },
@@ -48,6 +49,65 @@ describe('solveGA', () => {
       ...DEFAULT_GA_CONFIG, seed: 1, generations: 100000, populationSize: 40, maxTimeMs: 50,
     });
     expect(res.stoppedBy).toBe('time');
+  });
+
+  test('returns a set of diverse finalists (not just best)', () => {
+    const layout = {
+      elements: [
+        mkEl('a', 5, 5), mkEl('b', 10, 5), mkEl('c', 15, 5),
+        mkEl('d', 20, 5), mkEl('e', 25, 5),
+      ],
+    };
+    const ctx = { terrainMeters: squareTerrain, constraints: [] };
+    const { finalists } = solveGA(layout, ctx, {
+      ...DEFAULT_GA_CONFIG,
+      seed: 11,
+      populationSize: 20,
+      generations: 30,
+      maxTimeMs: 60000,
+      finalistCount: 5,
+      finalistMinDiversity: 1,
+    });
+    expect(Array.isArray(finalists)).toBe(true);
+    expect(finalists.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < finalists.length; i++) {
+      expect(finalists[i].score).toBeGreaterThanOrEqual(finalists[i - 1].score);
+    }
+  });
+
+  test('different seeds produce substantially different best layouts', () => {
+    const layout = {
+      elements: [
+        mkEl('a', 15, 15), mkEl('b', 15, 15), mkEl('c', 15, 15),
+        mkEl('d', 15, 15), mkEl('e', 15, 15), mkEl('f', 15, 15),
+      ],
+    };
+    const ctx = { terrainMeters: squareTerrain, constraints: [] };
+    const cfg = { ...DEFAULT_GA_CONFIG, populationSize: 20, generations: 30, maxTimeMs: 60000 };
+    const r1 = solveGA(layout, ctx, { ...cfg, seed: 1 });
+    const r2 = solveGA(layout, ctx, { ...cfg, seed: 2 });
+    const d = diversityDistance(r1.best, r2.best, squareTerrain);
+    expect(d).toBeGreaterThan(1);
+  });
+
+  test('finalists of a single run are themselves diverse', () => {
+    const layout = {
+      elements: [
+        mkEl('a', 15, 15), mkEl('b', 15, 15), mkEl('c', 15, 15), mkEl('d', 15, 15),
+      ],
+    };
+    const ctx = { terrainMeters: squareTerrain, constraints: [] };
+    const { finalists } = solveGA(layout, ctx, {
+      ...DEFAULT_GA_CONFIG, seed: 5, populationSize: 20, generations: 25,
+      maxTimeMs: 60000, finalistCount: 5, finalistMinDiversity: 1.5,
+    });
+    expect(finalists.length).toBeGreaterThanOrEqual(3);
+    for (let i = 0; i < finalists.length; i++) {
+      for (let j = i + 1; j < finalists.length; j++) {
+        const d = diversityDistance(finalists[i].layout, finalists[j].layout, squareTerrain);
+        expect(d).toBeGreaterThanOrEqual(1.5);
+      }
+    }
   });
 
   test('seeded run is deterministic', () => {

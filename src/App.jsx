@@ -549,7 +549,7 @@ function App() {
         terrainMeters: context.terrainMeters,
         constraints: context.constraints,
         weights: context.weights,
-        numRuns: 8,
+        numRuns: solverAlgorithm === 'ga' ? 3 : 8,
         maxPicks: 5,
         minDiversity: 3,
         scoreFactor: 2,
@@ -557,7 +557,7 @@ function App() {
         entrance: entrancePt,
         algorithm: solverAlgorithm,
         config: solverAlgorithm === 'ga'
-          ? { populationSize: 24, generations: 60, maxTimeMs: 3000 }
+          ? { populationSize: 30, generations: 70, maxTimeMs: 5000 }
           : { T0: 50, alpha: 0.95, itersPerT: 200, Tmin: 0.1, maxTimeMs: 3000 },
       });
       const generated = results.map(r => ({

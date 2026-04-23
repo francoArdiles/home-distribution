@@ -69,6 +69,20 @@ describe('runMultiRun', () => {
     }
   });
 
+  test('GA: 8 runs produce at least 2 diverse picks in an open terrain', () => {
+    const elements = [
+      mkEl('a', 5, 5), mkEl('b', 6, 5), mkEl('c', 7, 5),
+      mkEl('d', 8, 5), mkEl('e', 9, 5),
+    ];
+    const picks = runMultiRun({
+      elements, terrainMeters: terrain,
+      numRuns: 8, maxPicks: 5, minDiversity: 2, scoreFactor: 5,
+      algorithm: 'ga', seedBase: 123,
+      config: { populationSize: 16, generations: 25, maxTimeMs: 60000 },
+    });
+    expect(picks.length).toBeGreaterThanOrEqual(2);
+  });
+
   test('deterministic with same seedBase', () => {
     const elements = [mkEl('a', 5, 5), mkEl('b', 12, 12)];
     const params = {
