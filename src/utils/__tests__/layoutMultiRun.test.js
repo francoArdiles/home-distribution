@@ -83,6 +83,38 @@ describe('runMultiRun', () => {
     expect(picks.length).toBeGreaterThanOrEqual(2);
   });
 
+  test('GA: already-optimal starting layout still yields multiple diverse picks', () => {
+    // No constraints → best score is 0 for basically any layout. This is the
+    // "user accepted a proposal, then re-ran generator" scenario.
+    const elements = [
+      mkEl('a', 5, 5), mkEl('b', 10, 10), mkEl('c', 15, 15),
+    ];
+    const picks = runMultiRun({
+      elements, terrainMeters: terrain,
+      numRuns: 5, maxPicks: 5, minDiversity: 2, scoreFactor: 2,
+      algorithm: 'ga', seedBase: 77,
+      config: { populationSize: 16, generations: 20, maxTimeMs: 60000 },
+    });
+    expect(picks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('prioritizes feasibility: infeasible runs dropped when any feasible exists', () => {
+    // Constraint requires 'a' and 'b' to be >=3m apart. Initial has them at 1m
+    // (1 violation), easy for SA to repair. Output picks should all be feasible.
+    const elements = [mkEl('a', 9, 10), mkEl('b', 10, 10)];
+    const constraints = [
+      { id: 'c1', type: 'min-distance', sourceId: 'a', targetId: 'b', value: 3, enabled: true },
+    ];
+    const picks = runMultiRun({
+      elements, terrainMeters: terrain, constraints,
+      numRuns: 4, maxPicks: 5, minDiversity: 0, scoreFactor: 2, config: fastConfig,
+    });
+    expect(picks.length).toBeGreaterThan(0);
+    for (const p of picks) {
+      expect(p.violationCount).toBe(0);
+    }
+  });
+
   test('deterministic with same seedBase', () => {
     const elements = [mkEl('a', 5, 5), mkEl('b', 12, 12)];
     const params = {

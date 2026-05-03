@@ -1,4 +1,5 @@
 import registry from '../data/detailSchemas/index.js';
+import { DEFAULT_LAYERS } from '../data/detailSchemas/casa.js';
 
 /**
  * Returns the DetailSchema for a given definitionId, or null if not registered.
@@ -52,9 +53,33 @@ export const validateDetail = (detail, schema) => {
 };
 
 /**
- * Placeholder for future schema migrations.
- * Returns the detail unchanged if fromVersion === toVersion.
+ * Migrates a detail object to the current schema version.
+ * Each case fills in missing fields with safe defaults (never removes fields).
+ * Returns a new object; the original is not mutated.
  */
-export const migrateDetail = (detail, _fromVersion, _toVersion) => {
-  return { ...detail };
+export const migrateDetail = (detail) => {
+  if (!detail || !detail._schema) return detail;
+  const [schemaId, vStr] = detail._schema.split('@');
+  const fromVersion = parseInt(vStr ?? '1', 10);
+  const schema = registry[schemaId];
+  if (!schema) return detail; // unknown schema, preserve as-is
+  if (fromVersion >= schema.version) return detail; // already current
+
+  let d = { ...detail };
+
+  if (schemaId === 'casa') {
+    if (fromVersion < 3) {
+      d.doors           = d.doors           ?? [];
+      d.windows         = d.windows         ?? [];
+      d.rooms           = d.rooms           ?? [];
+      d.guides          = d.guides          ?? [];
+      d.networkElements = d.networkElements ?? [];
+      d.networkSegments = d.networkSegments ?? [];
+      d.layers          = d.layers          ?? { ...DEFAULT_LAYERS };
+      d.backgroundImage = d.backgroundImage ?? null;
+      d._schema = 'casa@3';
+    }
+  }
+
+  return d;
 };

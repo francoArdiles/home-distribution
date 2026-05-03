@@ -41,9 +41,16 @@ const distBetween = (a, b) => distanceElementToElement(asDistanceShape(a), asDis
 // No division by constraint count (dilution) and no cap at 1 (gradient loss).
 export const VIOLATION_FLOOR = 0.25;
 export const penaltyMinMax = (layout, constraints, terrainMeters, entrancePoint = null) => {
-  if (!constraints || constraints.length === 0) return 0;
+  const { score } = penaltyMinMaxDetailed(layout, constraints, terrainMeters, entrancePoint);
+  return score;
+};
+
+// Same as penaltyMinMax but also returns the count of violated (enabled) constraints.
+export const penaltyMinMaxDetailed = (layout, constraints, terrainMeters, entrancePoint = null) => {
+  if (!constraints || constraints.length === 0) return { score: 0, count: 0 };
   const diag = terrainDiagonal(terrainMeters) || 1;
   let score = 0;
+  let count = 0;
   for (const c of constraints) {
     if (!c.enabled) continue;
     const source = layout.elements.find(e => e.id === c.sourceId);
@@ -68,9 +75,10 @@ export const penaltyMinMax = (layout, constraints, terrainMeters, entrancePoint 
       : Math.max(0, c.value - actual);
     if (overshoot > 0) {
       score += VIOLATION_FLOOR + overshoot / diag;
+      count++;
     }
   }
-  return score;
+  return { score, count };
 };
 
 export const penaltyOverlap = (layout) => {
@@ -222,25 +230,33 @@ export const evaluateLayout = (layout, context) => {
   if (!layout.elements || layout.elements.length === 0) {
     return {
       total: 0,
+      softScore: 0,
+      violationCount: 0,
       breakdown: { violations: 0, overlap: 0, outOfTerrain: 0, pathLength: 0, deadSpace: 0, orientation: 0, imbalance: 0 },
     };
   }
+  const mm = penaltyMinMaxDetailed(layout, constraints, terrainMeters, entrancePoint);
+  const overlap = penaltyOverlap(layout);
+  const outOfTerrain = penaltyOutOfTerrain(layout, terrainMeters);
   const breakdown = {
-    violations: penaltyMinMax(layout, constraints, terrainMeters, entrancePoint),
-    overlap: penaltyOverlap(layout),
-    outOfTerrain: penaltyOutOfTerrain(layout, terrainMeters),
+    violations: mm.score,
+    overlap,
+    outOfTerrain,
     pathLength: penaltyPathLength(layout, terrainMeters),
     deadSpace: penaltyDeadSpace(layout, terrainMeters),
     orientation: penaltyOrientation(layout, terrainMeters),
     imbalance: penaltyImbalance(layout, terrainMeters),
   };
-  const total =
+  const hardTotal =
     weights.violations * breakdown.violations +
     weights.overlap * breakdown.overlap +
-    weights.outOfTerrain * breakdown.outOfTerrain +
+    weights.outOfTerrain * breakdown.outOfTerrain;
+  const softScore =
     weights.pathLength * breakdown.pathLength +
     weights.deadSpace * breakdown.deadSpace +
     weights.orientation * breakdown.orientation +
     weights.imbalance * breakdown.imbalance;
-  return { total, breakdown };
+  const total = hardTotal + softScore;
+  const violationCount = mm.count + (overlap > 0 ? 1 : 0) + (outOfTerrain > 0 ? 1 : 0);
+  return { total, softScore, violationCount, breakdown };
 };

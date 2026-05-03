@@ -1,168 +1,140 @@
-# AUTO_07 — Más metaheurísticas (Memético, DE, CMA-ES)
+# AUTO_07 — Más metaheurísticas (revisado 2026-04-22)
 
-Feature: ampliar el selector de algoritmo (`ProposalsPanel.jsx`) con tres nuevas opciones, aprovechando la abstracción `runMultiRun(payload.algorithm)` ya creada. El usuario avanzado elige la metaheurística; se incluye un preset **Auto** que decide según tamaño del problema.
+Feature: ampliar el selector de algoritmo (`ProposalsPanel.jsx`) con nuevas opciones, aprovechando `runMultiRun(payload.algorithm)`. El usuario avanzado elige la metaheurística; se incluye un preset **Auto** que decide según tamaño del problema.
 
-## Contexto
+## Revisión tras el fracaso de GA
 
-Estado actual: `solveSA` y `solveGA` conviven tras `solverFor(algorithm)` en `src/utils/layoutMultiRun.js`. Ambos exponen la misma firma: `solve(initialLayout, context, config) -> { best, bestScore, ... }`. Cualquier algoritmo nuevo debe respetar esa firma y no mutar `initialLayout`.
+Ver `plan/AUTO_FINDINGS_GA.md`. Conclusiones que cambian este plan:
 
-Invariantes obligatorios (ya garantizados por `layoutOperators.js` y los samplers de `layoutSolver.js`):
-- Elementos `locked: true` nunca cambian `x`, `y`, `rotation`.
-- Muestras nuevas caen dentro del polígono del terreno (rejection sampling con caída al centro del bbox).
+1. **El piso de violación dura (`>=1000`) rompe la presión selectiva** de cualquier método basado en población. Ranking por score puro no distingue "casi factible" de "desastre".
+2. **Crossover geométrico ciego destruye factibilidad**: mezclar coordenadas de padres feasibles produce hijos con violaciones en >95% de casos cuando hay restricciones de distancia.
+3. **Multi-run desde starts random no ayuda**: 200 generaciones no alcanzan para escapar de la región infactible.
+4. **SA gana porque parte factible y nunca sale** de la región factible si arranca ahí (la temperatura solo permite empeorar en el margen).
 
-## Subunidades
+**Implicación**: cualquier nuevo algoritmo evolutivo que no resuelva (1) y (2) fracasará igual que GA. Por lo tanto, **antes de implementar Memético, DE o CMA-ES se debe construir infraestructura de factibilidad**.
 
-| ID | Descripción | Estado |
-|----|-------------|--------|
-| AUTO_07_1 | Memético (GA + mini-SA como búsqueda local) | Pending |
-| AUTO_07_2 | Differential Evolution | Pending |
-| AUTO_07_3 | CMA-ES | Pending |
-| AUTO_07_4 | Preset "Auto" + heurística de selección | Pending |
+## Subunidades (reordenadas)
 
-## AUTO_07_1 — Memético (GA + local search)
+| ID | Descripción | Estado | Prioridad |
+|----|-------------|--------|-----------|
+| AUTO_07_0 | **Infraestructura de factibilidad**: ranking multicriterio + operador de reparación | Done (2026-04-23) | Bloqueante |
+| AUTO_07_1 | Memético (GA + mini-SA como búsqueda local / reparación) | Pending (opcional, GA ya funciona con repair) | Baja |
+| AUTO_07_4 | Preset "Auto" + heurística de selección | Done (2026-04-23) | Media |
+| AUTO_07_2 | Differential Evolution | Pending | Baja |
+| AUTO_07_3 | CMA-ES | Pending | Baja (evaluar si vale la pena) |
+
+## AUTO_07_0 — Infraestructura de factibilidad (nuevo, bloqueante)
 
 ### Objetivo
-Cada hijo tras crossover/mutación se refina con una mini-SA de pocas iteraciones antes de reinsertarse en la población. Debe ganarle a GA puro cuando el espacio tiene muchos óptimos locales cercanos.
+Sin esto ningún evolutivo funcionará. Dos piezas:
+
+**A. Ranking multicriterio.** En lugar de `sort(scores)`, ordenar por tupla `(violationCount, softScore)`:
+- `violationCount`: número de restricciones hard violadas.
+- `softScore`: suma de penalizaciones suaves (lo que hoy da valores 0 - 1).
+
+De esta forma todo individuo con 0 violaciones domina a cualquiera con 1+, y entre iguales se compara por calidad.
 
 ### Diseño
-- Nuevo archivo `src/utils/layoutMemetic.js` con `solveMemetic(initial, context, config)`.
-- Reutiliza `lineSplitCrossover`, `tournamentSelect`, `initialPopulation` de `layoutGA.js` (exportarlos).
-- Config:
-  - `populationSize: 20` (menor que GA porque cada eval es más cara)
-  - `generations: 40`
-  - `localSearchIters: 150` (iteraciones de mini-SA por hijo)
-  - `localSearchT: 5` (temperatura fija, baja)
-  - `localSearchProb: 0.3` (no refinar todos los hijos; ahorra presupuesto)
-- Mini-SA helper local: 150 iteraciones con `randomOperator`, aceptación Metropolis a temperatura fija. No reusar `solveSA` directamente (inicializa loops completos y es caro por el trace).
-- Respetar `maxTimeMs` como corte duro igual que GA.
+- Modificar `src/utils/layoutFitness.js` para devolver `{ total, softScore, violationCount, violations }` (hoy ya tiene `violations`, solo exponer el contador).
+- Nuevo helper `src/utils/layoutRanking.js`:
+  - `compareLex(a, b)`: retorna -1/0/1 comparando por `(violationCount, softScore)`.
+  - `rankLex(evaluations)`: retorna array de rangos.
+- `layoutGA.js` y futuros: sustituir `computeRanks(scores)` por `rankLex(evaluations)`. SA mantiene acepción Metropolis sobre `total` (no necesita cambio).
+- `layoutMultiRun.js`: el filtrado por `scoreFactor` se hace solo entre individuos con 0 violaciones; si no hay ninguno con 0, devolver solo el best por violationCount (sin diversidad forzada, porque la prioridad es factibilidad).
 
-### Tests (`src/utils/__tests__/layoutMemetic.test.js`)
-- Mejora (o iguala) score inicial en caso con 3 elementos y 2 restricciones min-distance.
-- Locked element nunca se mueve.
-- Stops by time con `maxTimeMs: 50`, `generations: 100000`.
-- Determinista con seed fija.
-
-### Integración
-- `layoutMultiRun.js`: `SUPPORTED_ALGORITHMS` añade `'memetic'`, `solverFor` lo enruta.
-- `ProposalsPanel.jsx`: nueva `<option value="memetic">Memético (GA + LS)</option>`.
-- `App.jsx`: bloque en `handleGenerateProposals` que pasa defaults memetic cuando `solverAlgorithm === 'memetic'`.
-
-### Riesgos
-- Presupuesto de tiempo: la mini-SA multiplica evaluaciones. Medir con el test de performance (10 elementos, 50×50m, < 5s) antes de mergear.
-- Regresión de GA: exportar símbolos internos rompe encapsulación; alternativa es duplicar helpers.
-
-## AUTO_07_2 — Differential Evolution
-
-### Objetivo
-Algoritmo evolutivo sin crossover espacial: cada vector objetivo se combina con `target + F * (a - b)`, donde `a` y `b` son dos individuos al azar. Converge más rápido que GA en problemas continuos y tiene menos hiperparámetros.
+**B. Operador de reparación.** Tras crossover o mutación que rompa restricciones, proyectar el hijo a factibilidad:
+- Identificar pares que violan `min-distance`: para cada par, mover el elemento no-locked (o ambos si ninguno lo está) en la dirección opuesta hasta satisfacer la distancia.
+- Iterar hasta convergencia o N intentos (≤10).
+- Si no converge, descartar el hijo (devolver padre).
 
 ### Diseño
-- Archivo `src/utils/layoutDE.js` con `solveDE(initial, context, config)`.
-- Genoma: por elemento no-locked, vector `[x, y, rotationFlag]` donde `rotationFlag` es continuo `[0, 1]` y se redondea para decidir rotación 0°/90°.
-- Config:
-  - `populationSize: 30`
-  - `generations: 80`
-  - `F: 0.5` (factor de mutación diferencial)
-  - `CR: 0.9` (crossover rate, binomial)
-  - `maxTimeMs: 5000`
-- Estrategia clásica `DE/rand/1/bin`:
-  1. Para cada individuo `i`: elegir `r1, r2, r3` distintos de `i`.
-  2. `v = x_r1 + F * (x_r2 - x_r3)` por coordenada continua.
-  3. Cada coordenada del hijo: con prob `CR` toma de `v`, si no de `x_i`.
-  4. Clamp cada `(x, y)` al bbox y, si cae fuera del polígono, rechazo + re-sampleo.
-  5. Reemplazo greedy: hijo entra si `score(hijo) <= score(padre)`.
-- Locked elements: clonados tal cual del padre; nunca se combinan.
+- Nuevo módulo `src/utils/layoutRepair.js` con `repair(layout, context, maxIters=10) -> { layout, converged }`.
+- Cuello de botella: evaluar solo las restricciones activas en el layout, no todas.
+- Locked elements nunca se mueven; si un par locked-locked viola, no hay reparación posible (devolver `converged: false`).
 
-### Tests (`src/utils/__tests__/layoutDE.test.js`)
-- Mejora score inicial con 3 elementos + restricciones.
-- Locked element nunca se mueve.
-- Clamp: con terreno triangular, ningún elemento final queda fuera.
-- Stops by time.
-- Determinista con seed.
+### Tests
+- `layoutRanking.test.js`: 2-factibles vs 1-factible → el factible gana aunque tenga peor softScore.
+- `layoutRepair.test.js`:
+  - Dos elementos a 1m con constraint min-distance=3 → tras reparación están a ≥3m.
+  - Uno locked, otro no → el locked no se mueve, el otro sí.
+  - Locked-locked violando → `converged: false`, layout sin cambios.
+  - 5 elementos en grid apretado con constraints encadenadas → converge en ≤10 iteraciones o descarta.
 
 ### Integración
-- Igual que memético: `SUPPORTED_ALGORITHMS`, `solverFor`, opción en UI, defaults en `App.jsx`.
+- GA pre-existente: activar en `mutateLayout` (repair post-mutación) y en offspring antes de `evaluateLayout`. Validar que el test real del usuario (16 elementos) produce ≥2 picks diversos. Si lo consigue, re-promover GA a "estable".
+- SA no necesita este operador (ya parte factible).
 
-### Riesgos
-- El operador continuo no produce cambios de rotación naturalmente (el `rotationFlag` se mueve poco cerca de 0.5 → pocas mutaciones de rotación). Mitigación: aplicar `rotate` operator con prob 0.1 post-mutación como "mutation restart".
+### Riesgo
+- `repair` puede crear ciclos (A empuja B, B empuja A). Mitigación: orden determinista + límite de iteraciones.
+- Coste por evaluación: reparar 40 individuos × 10 iters cada uno puede dominar el tiempo. Medir.
 
-## AUTO_07_3 — CMA-ES
+## AUTO_07_1 — Memético (revisado)
 
-### Objetivo
-Algoritmo estado-del-arte para optimización continua. Aprende la matriz de covarianza de las direcciones que mejoran fitness, adaptándose al paisaje. Gana en terrenos estrechos e irregulares donde SA/GA/DE se estancan.
+### Cambio principal
+Con `AUTO_07_0` en pie, el memético cambia de "GA + mini-SA" a **"GA + reparación + mini-SA como intensificación"**. La mini-SA ya no tiene que salvar factibilidad (lo hace el repair), solo pulir calidad.
 
 ### Diseño
-- Dependencia: evaluar librerías viables (`cma-es`, `fmin`, escribirlo propio). Preferir implementación propia compacta (≈150 líneas) que no añada peso al bundle.
-- Archivo `src/utils/layoutCMAES.js` con `solveCMAES(initial, context, config)`.
-- Genoma aplanado: `[x0, y0, x1, y1, ...]` solo elementos no-locked (rotación se maneja aparte con mutación discreta, o se cuantiza como DE).
-- Config:
-  - `populationSize (λ)`: `4 + floor(3 * ln(N))` donde N = 2 * #movable elements.
-  - `sigma0`: 0.3 * diagonal del terreno.
-  - `generations`: 50.
-  - `maxTimeMs: 5000`.
-- Algoritmo base (`(μ, λ)-CMA-ES`):
-  1. Muestrear λ hijos `~ N(mean, sigma² * C)`.
-  2. Evaluar, seleccionar μ mejores.
-  3. Actualizar `mean`, `sigma`, `C` con las ecuaciones estándar (path evolution + rank-μ update).
-- Helpers: necesitamos `eigen-decomposition` 2D/pequeña. Para ≤30 elementos (N ≤ 60), Jacobi converge rápido.
-- Proyección al polígono: post-muestra, rechazar hijos con algún elemento fuera; si más del 50% de una generación se rechaza, reducir `sigma` y reintentar.
+- Igual que el plan original pero:
+  - Crossover + mutación → `repair` → mini-SA (150 iters a T fija baja) → evaluar.
+  - `localSearchProb: 0.2` (baja porque repair ya absorbe parte del coste).
+- Si `repair` descarta el hijo, saltar mini-SA y copiar padre.
 
-### Tests (`src/utils/__tests__/layoutCMAES.test.js`)
-- Mejora score inicial con 3 elementos + restricciones (tolerancia mayor: CMA-ES necesita más generaciones).
-- Locked element nunca se mueve.
-- Terreno triangular: todos los elementos finales están dentro.
-- Sigma decrece cuando la población converge (trace incluye `sigma` por generación).
-- Stops by time con budget corto.
+### Meta de validación
+- En el caso real del usuario (16 elementos, varias min-distance), debe producir ≥3 picks diversos con `violationCount == 0` en ≤20 s. Si no lo logra, el memético tampoco sirve y vamos directo a descartar evolutivos.
 
-### Integración
-- Limitar en UI a problemas con ≤30 elementos; mostrar warning si se excede.
-- `SUPPORTED_ALGORITHMS` + opción + defaults.
+## AUTO_07_2 — Differential Evolution (re-evaluado)
 
-### Riesgos
-- Complejidad de implementación: CMA-ES tiene matemática pesada (eigendecomp estable, path evolution, cumulative step-size). Una prueba de concepto simplificada (`(1+1)-CMA-ES` sin covarianza completa, solo `sigma` adaptativo) es un fallback razonable si el full-blown cuesta demasiado.
-- Performance: O(N²) por generación. No viable para N > 60 (30 elementos). Hacer early-return con fallback a DE/GA si el payload excede el límite.
+### Posición
+DE sufre el MISMO problema que GA: su operador `v = x_r1 + F*(x_r2 - x_r3)` es ciego a la geometría. La diferencia entre dos layouts factibles rara vez produce un vector de cambio que mantenga factibilidad.
 
-## AUTO_07_4 — Preset "Auto"
+**Condicional**: implementar DE solo si el memético demuestra que la combinación `repair + LS` resuelve el problema de factibilidad. Entonces DE con el mismo `repair` post-trial vale la pena como benchmark rápido.
 
-### Objetivo
-Opción por defecto que elige el algoritmo según tamaño del problema y naturaleza de las restricciones.
+Sin AUTO_07_0 funcionando, **no implementar DE**.
 
-### Heurística inicial
+## AUTO_07_3 — CMA-ES (re-evaluado)
+
+### Posición
+CMA-ES asume terreno continuo sin restricciones duras. La proyección naive al polígono y el descarte de inviables hacen colapsar `sigma` (toda la población cae fuera → se achica sigma → cae en el mismo punto).
+
+**Condicional**: implementar solo si:
+1. AUTO_07_0 funciona.
+2. Se identifica un problema real donde SA + Memético se estancan y CMA-ES aporta valor medible.
+
+Más realista: **descartar CMA-ES para este proyecto** y sustituirlo por una variante de SA paralela (multiple chains con exchange) si hace falta más exploración.
+
+## AUTO_07_4 — Preset "Auto" (ajustado)
+
+### Heurística revisada
 ```
 N = #elementos movibles
 H = #restricciones hard enabled
-si N <= 8 y H >= N:       SA        (pocos, muy restringido → recocido fino)
-si N <= 20 y H < N:       DE        (rápido, mediano, baja restricción)
-si N <= 30:               CMA-ES    (mediano, alta calidad)
-si N > 30:                GA        (único que escala barato)
+
+si H == 0:                 SA        (sin constraints el espacio es trivial)
+si H >= 1 y N <= 30:       SA        (default seguro)
+si H >= 1 y N > 30 y memetic_disponible: Memetic
+otro caso:                 SA
 ```
-Caso especial: si hay ≥2 clusters grandes (≥4 miembros cada uno), forzar **Memético** — el crossover espacial + pulido local aprovecha la estructura.
+
+GA/DE/CMA-ES no entran en la heurística hasta demostrar valor con el test real.
 
 ### Diseño
-- Nuevo módulo `src/utils/algorithmSelector.js` con `chooseAlgorithm(elements, constraints) -> string`.
-- En `App.jsx`: cuando `solverAlgorithm === 'auto'`, calcular el algoritmo real al hacer click en Generar y pasarlo al worker.
-- UI: `ProposalsPanel` muestra "Auto (usará: XYZ)" como pista.
+Igual al plan original (módulo `algorithmSelector.js`), pero con la heurística de arriba. Mientras solo exista SA estable, "Auto" es equivalente a SA; el campo se mantiene como punto de extensión.
 
-### Tests (`src/utils/__tests__/algorithmSelector.test.js`)
-- Pocos elementos + muchas restricciones → 'sa'.
-- 25 elementos, pocas restricciones → 'cmaes'.
-- 60 elementos → 'ga'.
-- Con clusters grandes → 'memetic'.
+## Métricas para mergear
+
+Antes de promover cualquier algoritmo a "estable" (quitar el flag experimental de la UI), debe cumplir en el caso real del usuario (16 elementos, varias constraints):
+
+1. **Factibilidad**: ≥80% de los picks tienen `violationCount == 0`.
+2. **Diversidad**: ≥3 picks distintos (distancia ≥3m entre cualquier par).
+3. **Calidad**: mejor softScore dentro del 50% del mejor de SA.
+4. **Tiempo**: ≤1.5× el tiempo de SA sobre el mismo input.
+
+Si falla cualquiera, se mantiene como experimental o se descarta.
 
 ## Orden sugerido
 
-1. **AUTO_07_1 Memético** — máxima ganancia/esfuerzo, reusa GA.
-2. **AUTO_07_2 DE** — fácil de escribir, buen benchmark contra GA.
-3. **AUTO_07_4 Auto** — con 4 algoritmos (SA, GA, Memético, DE) el selector ya aporta valor.
-4. **AUTO_07_3 CMA-ES** — último, por complejidad matemática. Si el esfuerzo es prohibitivo, cerrar con `(1+1)-CMA-ES` simplificado.
-
-Cada subunidad commit independiente. Meta: cada unidad con su propio archivo de tests pasando en verde antes del commit.
-
-## Métricas para elegir ganador
-
-Tras implementar todas, correr benchmark sobre el `test.json` del usuario (17 elementos, 16 restricciones, terreno triangular):
-- Best score alcanzado en 3s.
-- Varianza entre 8 runs (mismo problema, seeds distintas).
-- % de propuestas que respetan todas las restricciones hard.
-
-Incluir tabla de resultados en el commit final. Si CMA-ES o Memético dominan claramente, mover el default de SA a ese algoritmo.
+1. **AUTO_07_0** (bloqueante): ranking + repair. Validar con los tests ya escritos de GA.
+2. **Re-evaluar GA** con AUTO_07_0 activo. Si funciona, promover a estable y cerrar el findings doc.
+3. **AUTO_07_1 Memético** si GA sigue insuficiente.
+4. **AUTO_07_4 Auto** cuando haya >1 algoritmo estable.
+5. DE y CMA-ES solo si 1-4 agotaron valor.

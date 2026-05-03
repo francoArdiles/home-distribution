@@ -1,6 +1,8 @@
 import { solveSA, randomInitialLayout, perturbedLayout, mulberry32, DEFAULT_SA_CONFIG } from './layoutSolver.js';
 import { solveGA, DEFAULT_GA_CONFIG } from './layoutGA.js';
 import { diversityDistance } from './layoutDiversity.js';
+import { evaluateLayout } from './layoutFitness.js';
+import { compareLex } from './layoutRanking.js';
 
 export const SUPPORTED_ALGORITHMS = ['sa', 'ga'];
 
@@ -28,19 +30,14 @@ export const runMultiRun = (payload, onProgress) => {
   const { solve, defaults } = solverFor(algorithm);
   const context = { terrainMeters, constraints, weights, entrancePoint };
   const runs = [];
-  // Seeding strategy depends on algorithm.
-  // SA is inherently exploratory (temperature) so it benefits from
-  // perturbations of the user's layout as starting points.
-  // GA is exploitative and collapses populations, so we push much more
-  // random seeds so different runs find different basins.
+  // Seeding strategy: start from the user's (feasible) layout and perturb
+  // with increasing sigma across runs. Fresh random starts fall into
+  // hard-constraint violations that neither SA nor GA can escape within
+  // the time budget, so they're useless for alternative-layout generation.
   const seedingFor = (i) => {
     if (i === 0) return 'verbatim';
-    if (algorithm === 'ga') {
-      // 1 verbatim, 2 perturbed, rest random.
-      if (i <= 2) return 'perturbed';
-      return 'random';
-    }
-    if (i >= numRuns - 2) return 'random';
+    if (algorithm === 'ga' && i >= numRuns - 1) return 'random';
+    if (algorithm === 'sa' && i >= numRuns - 2) return 'random';
     return 'perturbed';
   };
   for (let i = 0; i < numRuns; i++) {
@@ -58,15 +55,30 @@ export const runMultiRun = (payload, onProgress) => {
     }
     const runConfig = { ...defaults, ...config, seed };
     const result = solve(initial, context, runConfig);
-    // If the solver produced a set of distinct finalists (e.g., GA's
-    // final population), contribute all of them as candidates so that
-    // downstream diversity filtering has real variety to choose from.
+    const pushRun = (layout, scoreFallback) => {
+      const ev = evaluateLayout(layout, context);
+      runs.push({
+        layout,
+        score: ev.total ?? scoreFallback,
+        softScore: ev.softScore,
+        violationCount: ev.violationCount,
+      });
+    };
     if (Array.isArray(result.finalists) && result.finalists.length > 0) {
       for (const f of result.finalists) {
-        runs.push({ layout: f.layout, score: f.score });
+        if (f.violationCount != null && f.softScore != null) {
+          runs.push({
+            layout: f.layout,
+            score: f.score,
+            softScore: f.softScore,
+            violationCount: f.violationCount,
+          });
+        } else {
+          pushRun(f.layout, f.score);
+        }
       }
     } else {
-      runs.push({ layout: result.best, score: result.bestScore });
+      pushRun(result.best, result.bestScore);
     }
     if (onProgress) {
       const bestSoFar = runs.reduce((m, r) => Math.min(m, r.score), Infinity);
@@ -74,11 +86,22 @@ export const runMultiRun = (payload, onProgress) => {
     }
   }
 
-  const sorted = runs.slice().sort((a, b) => a.score - b.score);
+  const sorted = runs.slice().sort((a, b) => compareLex(a, b));
   if (sorted.length === 0) return [];
-  const best = sorted[0].score;
-  const threshold = best >= 0 ? best * scoreFactor : best / scoreFactor;
-  const filtered = sorted.filter(p => p.score <= threshold);
+  // Prioritize feasibility: if any run has 0 violations, drop every infeasible run.
+  // Among feasibles, apply the score-based threshold on softScore. If no feasible
+  // exists, return only the best-by-violationCount candidates (no diversity filter).
+  const minViolations = sorted[0].violationCount ?? 0;
+  const feasibles = sorted.filter(p => (p.violationCount ?? 0) === minViolations);
+  let filtered;
+  if (minViolations > 0) {
+    filtered = feasibles;
+  } else {
+    const best = feasibles[0].softScore ?? feasibles[0].score;
+    const margin = Math.max(Math.abs(best) * Math.max(scoreFactor - 1, 0), 1);
+    const threshold = best + margin;
+    filtered = feasibles.filter(p => (p.softScore ?? p.score) <= threshold);
+  }
 
   const picks = [];
   for (const cand of filtered) {

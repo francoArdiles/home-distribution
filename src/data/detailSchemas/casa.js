@@ -1,6 +1,13 @@
+export const DEFAULT_LAYERS = {
+  architectural: { visible: true },
+  electrical:    { visible: true },
+  water:         { visible: true },
+  drainage:      { visible: true },
+};
+
 export default {
   _schema: 'casa',
-  version: 2,
+  version: 3,
   layout: 'two-column',
   fields: [
     { key: 'floors',       label: 'Pisos',          type: 'number', unit: '', min: 1,  max: 5,  integer: true },
@@ -23,5 +30,13 @@ export default {
     notes: '',
     walls: [],
     labels: [],
+    doors: [],
+    windows: [],
+    rooms: [],
+    guides: [],
+    networkElements: [],
+    networkSegments: [],
+    layers: DEFAULT_LAYERS,
+    backgroundImage: null,
   },
 };

@@ -7,6 +7,8 @@ import {
   perturbedLayout,
 } from './layoutSolver.js';
 import { diversityDistance } from './layoutDiversity.js';
+import { rankLex, compareLex, argminLex } from './layoutRanking.js';
+import { repairLayout } from './layoutRepair.js';
 
 export const DEFAULT_GA_CONFIG = {
   populationSize: 32,
@@ -26,6 +28,7 @@ export const DEFAULT_GA_CONFIG = {
   traceEvery: 5,
   finalistCount: 6,
   finalistMinDiversity: 2,
+  repairIters: 8,
 };
 
 const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -138,19 +141,15 @@ const rankTournament = (ranks, rng, k) => {
   return bestIdx;
 };
 
-const computeRanks = (scores) => {
-  const order = scores.map((s, i) => [s, i]).sort((a, b) => a[0] - b[0]);
-  const ranks = new Array(scores.length);
-  for (let r = 0; r < order.length; r++) ranks[order[r][1]] = r;
-  return ranks;
-};
-
 const initialPopulation = (elements, terrainMeters, rng, size) => {
   const pop = [];
   pop.push({ elements: elements.map(el => ({ ...el })) });
-  const perturbedCount = Math.max(0, Math.floor((size - 1) * 0.3));
+  // Favor perturbed individuals heavily: random starts land in hard-constraint
+  // violations that GA can't reliably escape within the generation budget,
+  // so they pollute selection and dominate the population as infeasible junk.
+  const perturbedCount = Math.max(0, Math.floor((size - 1) * 0.8));
   for (let i = 0; i < perturbedCount; i++) {
-    const sigma = 0.1 + 0.05 * i;
+    const sigma = 0.08 + (0.35 * i) / Math.max(1, perturbedCount - 1);
     pop.push(perturbedLayout(elements, terrainMeters, rng, sigma));
   }
   while (pop.length < size) {
@@ -171,31 +170,45 @@ export const solveGA = (initialLayout, context, config = DEFAULT_GA_CONFIG) => {
     rng,
     cfg.populationSize,
   );
-  let scores = population.map(ind => evaluateLayout(ind, context).total);
+  // Repair the initial population so that offspring already compete on feasibility.
+  population = population.map((ind) => {
+    const { layout } = repairLayout(ind, context, 6);
+    return layout;
+  });
+  let evaluations = population.map(ind => evaluateLayout(ind, context));
+  let scores = evaluations.map(e => e.total);
 
-  let bestIdx = 0;
-  for (let i = 1; i < scores.length; i++) if (scores[i] < scores[bestIdx]) bestIdx = i;
+  let bestIdx = argminLex(evaluations);
   let best = population[bestIdx];
+  let bestEval = evaluations[bestIdx];
   let bestScore = scores[bestIdx];
 
   const trace = [];
   let gen = 0;
   let stoppedBy = 'generations';
   let stagnant = 0;
-  let prevBest = bestScore;
+  let prevBest = bestEval;
+  const repairIters = cfg.repairIters ?? 8;
+
+  const applyRepair = (child) => {
+    const { layout } = repairLayout(child, context, repairIters);
+    return layout;
+  };
 
   for (gen = 0; gen < cfg.generations; gen++) {
-    if (bestScore < prevBest - 1e-9) {
+    if (compareLex(bestEval, prevBest) < 0) {
       stagnant = 0;
-      prevBest = bestScore;
+      prevBest = bestEval;
     } else {
       stagnant++;
     }
     const hyper = stagnant >= cfg.stagnationLimit;
     const strength = hyper ? cfg.hypermutationBoost : 1;
 
-    const ranks = computeRanks(scores);
-    const order = scores.map((s, i) => [s, i]).sort((a, b) => a[0] - b[0]);
+    const ranks = rankLex(evaluations);
+    const order = evaluations
+      .map((e, i) => [e, i])
+      .sort((a, b) => compareLex(a[0], b[0]));
 
     // Rotating elite: keep top-eliteCount of THIS generation; no permanent hall of fame.
     const elites = [];
@@ -223,19 +236,26 @@ export const solveGA = (initialLayout, context, config = DEFAULT_GA_CONFIG) => {
         child = { elements: parentA.elements.map(e => ({ ...e })) };
       }
       child = mutateLayout(child, terrainMeters, rng, cfg, strength);
+      child = applyRepair(child);
       nextPop.push(child);
     }
     while (nextPop.length < cfg.populationSize) {
-      nextPop.push(randomInitialLayout(initialLayout.elements, terrainMeters, rng));
+      const immigrant = randomInitialLayout(initialLayout.elements, terrainMeters, rng);
+      nextPop.push(applyRepair(immigrant));
     }
 
     if (hyper) stagnant = 0;
 
     population = nextPop;
-    scores = population.map(ind => evaluateLayout(ind, context).total);
+    evaluations = population.map(ind => evaluateLayout(ind, context));
+    scores = evaluations.map(e => e.total);
 
     for (let i = 0; i < population.length; i++) {
-      if (scores[i] < bestScore) { best = population[i]; bestScore = scores[i]; }
+      if (compareLex(evaluations[i], bestEval) < 0) {
+        best = population[i];
+        bestEval = evaluations[i];
+        bestScore = scores[i];
+      }
     }
 
     if (gen % cfg.traceEvery === 0) {
@@ -249,18 +269,20 @@ export const solveGA = (initialLayout, context, config = DEFAULT_GA_CONFIG) => {
     }
   }
 
-  const ranked = scores.map((s, i) => [s, i]).sort((a, b) => a[0] - b[0]);
+  const ranked = evaluations
+    .map((e, i) => [e, i])
+    .sort((a, b) => compareLex(a[0], b[0]));
   const finalists = [];
-  for (const [s, idx] of ranked) {
+  for (const [ev, idx] of ranked) {
     const cand = population[idx];
     const distinct = finalists.every(
       f => diversityDistance(cand, f.layout, terrainMeters) >= cfg.finalistMinDiversity,
     );
     if (finalists.length === 0 || distinct) {
-      finalists.push({ layout: cand, score: s });
+      finalists.push({ layout: cand, score: ev.total, softScore: ev.softScore, violationCount: ev.violationCount });
     }
     if (finalists.length >= cfg.finalistCount) break;
   }
 
-  return { best, bestScore, generations: gen, trace, stoppedBy, finalists };
+  return { best, bestScore, bestEval, generations: gen, trace, stoppedBy, finalists };
 };

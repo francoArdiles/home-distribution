@@ -28,6 +28,7 @@ import ConstraintPanel from './components/ConstraintPanel.jsx';
 import CustomElementModal from './components/CustomElementModal.jsx';
 import ProposalsPanel from './components/ProposalsPanel.jsx';
 import { solveSA, randomInitialLayout, mulberry32 } from './utils/layoutSolver.js';
+import { selectAlgorithm } from './utils/algorithmSelector.js';
 import { useLayoutSolver } from './hooks/useLayoutSolver.js';
 import { generatePaths as autoGeneratePaths } from './utils/pathGenerator.js';
 import { DEFAULT_WEIGHTS } from './utils/layoutFitness.js';
@@ -91,7 +92,7 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [proposalsPanelOpen, setProposalsPanelOpen] = useState(false);
   const [proposalBackup, setProposalBackup] = useState(null);
-  const [solverAlgorithm, setSolverAlgorithm] = useState('sa');
+  const [solverAlgorithm, setSolverAlgorithm] = useState('auto');
   const { solve: solveMultiRun, cancel: cancelMultiRun, progress: multiRunProgress, isRunning: multiRunIsRunning } = useLayoutSolver();
 
   const handleStartPath = useCallback(() => {
@@ -538,27 +539,36 @@ function App() {
     setSelectedProposalId(null);
   }, [proposalBackup]);
 
-  const handleGenerateProposals = useCallback(async () => {
+  const handleGenerateProposals = useCallback(async (advancedParams = {}) => {
     if (!finished || placedElements.length === 0) return;
     if (selectedProposalId) restoreBackupInline();
     const context = buildSolverContext();
     const entrancePt = computeEntrancePointMeters();
+    const resolvedAlgorithm = solverAlgorithm === 'auto'
+      ? selectAlgorithm({ elements: placedElements, constraints: context.constraints })
+      : solverAlgorithm;
+    const {
+      numRuns = resolvedAlgorithm === 'ga' ? 6 : 8,
+      minDiversity = 3,
+      scoreFactor = 2,
+      config = resolvedAlgorithm === 'ga'
+        ? { populationSize: 40, generations: 200, maxTimeMs: 4000 }
+        : { T0: 50, alpha: 0.95, itersPerT: 200, Tmin: 0.1, maxTimeMs: 3000 },
+    } = advancedParams;
     try {
       const results = await solveMultiRun({
         elements: placedElements,
         terrainMeters: context.terrainMeters,
         constraints: context.constraints,
         weights: context.weights,
-        numRuns: solverAlgorithm === 'ga' ? 3 : 8,
+        numRuns,
         maxPicks: 5,
-        minDiversity: 3,
-        scoreFactor: 2,
+        minDiversity,
+        scoreFactor,
         seedBase: Date.now() & 0xffff,
         entrance: entrancePt,
-        algorithm: solverAlgorithm,
-        config: solverAlgorithm === 'ga'
-          ? { populationSize: 30, generations: 70, maxTimeMs: 5000 }
-          : { T0: 50, alpha: 0.95, itersPerT: 200, Tmin: 0.1, maxTimeMs: 3000 },
+        algorithm: resolvedAlgorithm,
+        config,
       });
       const generated = results.map(r => ({
         id: generateId(),
@@ -575,6 +585,28 @@ function App() {
       if (err?.message !== 'cancelled') console.error('solve error', err);
     }
   }, [finished, placedElements, points, selectedProposalId, restoreBackupInline, buildSolverContext, computeEntrancePointMeters, solveMultiRun, solverAlgorithm]);
+
+  const handleGeneratePathsOnly = useCallback(() => {
+    if (!finished || placedElements.length === 0) return;
+    if (selectedProposalId) restoreBackupInline();
+    const context = buildSolverContext();
+    const entrancePt = computeEntrancePointMeters();
+    const autoPaths = autoGeneratePaths({ elements: placedElements }, context.terrainMeters, {
+      entrance: entrancePt,
+    });
+    const proposal = {
+      id: generateId(),
+      createdAt: Date.now(),
+      score: 0,
+      elements: placedElements,
+      paths: autoPaths,
+      pathsOnly: true,
+      constraintReport: validateAllConstraints(
+        context.constraints, placedElements, points, baseScale, entrancePt,
+      ),
+    };
+    setProposals(prev => [proposal, ...prev].slice(0, 8));
+  }, [finished, placedElements, points, selectedProposalId, restoreBackupInline, buildSolverContext, computeEntrancePointMeters]);
 
   const handleSelectProposal = useCallback((id) => {
     const p = proposals.find(x => x.id === id);
@@ -793,6 +825,7 @@ function App() {
           onDiscard={handleDiscardProposal}
           onIterate={handleIterateProposal}
           onGenerate={handleGenerateProposals}
+          onGeneratePathsOnly={handleGeneratePathsOnly}
           onClose={handleCloseProposals}
           algorithm={solverAlgorithm}
           onAlgorithmChange={setSolverAlgorithm}

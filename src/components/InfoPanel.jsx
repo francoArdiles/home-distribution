@@ -2,6 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { getConstraintDisplayName } from '../utils/constraintUtils.js';
 import { pathTotalLength } from '../utils/pathUtils.js';
 
+const resolveSourceLabel = (sourceId, elements) => {
+  if (!sourceId || sourceId === 'any') return 'Cualquier elemento';
+  const el = elements.find(e => e.id === sourceId);
+  return el ? (el.label || el.definitionId) : sourceId;
+};
+
+const resolveTargetLabel = (targetId, elements) => {
+  if (targetId === 'terrain') return 'Límite del terreno';
+  if (targetId === 'any') return 'Cualquier otro elemento';
+  if (targetId === 'entrance') return 'Entrada del terreno';
+  const el = elements.find(e => e.id === targetId);
+  return el ? (el.label || el.definitionId) : targetId;
+};
+
 const InfoPanel = ({
   points, finished, area, perimeter, baseScale,
   selectedElement, selectedPath, onRenameElement,
@@ -9,6 +23,7 @@ const InfoPanel = ({
 }) => {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
+  const [groupBy, setGroupBy] = useState('none');
 
   useEffect(() => {
     if (selectedElement) {
@@ -137,26 +152,70 @@ const InfoPanel = ({
             )}
           </div>
 
+          {/* Group-by controls */}
+          <div className="flex gap-1 mb-2">
+            {[['none', 'Todas'], ['origin', 'Por origen'], ['target', 'Por destino']].map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setGroupBy(val)}
+                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                  groupBy === val
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <ul className="space-y-1.5">
-            {constraints.map(c => {
-              const result = getResult(c.id);
-              const isValid = !result || result.valid;
-              return (
-                <li key={c.id} className={`text-xs flex items-start gap-1.5 ${!c.enabled ? 'opacity-40' : ''}`}>
-                  <span className={`mt-0.5 font-bold shrink-0 ${isValid ? 'text-green-500' : 'text-red-500'}`}>
-                    {c.enabled ? (isValid ? '✓' : '✗') : '–'}
-                  </span>
-                  <span className="flex-1 leading-snug">
-                    {getConstraintDisplayName(c, elements)}
-                    {result && !result.valid && (
-                      <span className="block text-red-400 mt-0.5">
-                        {result.actualDistance?.toFixed(1)} m / mín. {result.requiredDistance} m
-                      </span>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
+            {(() => {
+              const renderItem = (c) => {
+                const result = getResult(c.id);
+                const isValid = !result || result.valid;
+                return (
+                  <li key={c.id} className={`text-xs flex items-start gap-1.5 ${!c.enabled ? 'opacity-40' : ''}`}>
+                    <span className={`mt-0.5 font-bold shrink-0 ${isValid ? 'text-green-500' : 'text-red-500'}`}>
+                      {c.enabled ? (isValid ? '✓' : '✗') : '–'}
+                    </span>
+                    <span className="flex-1 leading-snug">
+                      {getConstraintDisplayName(c, elements)}
+                      {result && !result.valid && (
+                        <span className="block text-red-400 mt-0.5">
+                          {result.actualDistance?.toFixed(1)} m / mín. {result.requiredDistance} m
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                );
+              };
+
+              if (groupBy === 'none') {
+                const sorted = [...constraints].sort((a, b) =>
+                  getConstraintDisplayName(a, elements).localeCompare(getConstraintDisplayName(b, elements))
+                );
+                return sorted.map(renderItem);
+              }
+
+              const keyFn = groupBy === 'origin'
+                ? (c) => resolveSourceLabel(c.sourceId, elements)
+                : (c) => resolveTargetLabel(c.targetId, elements);
+              const groups = {};
+              constraints.forEach(c => {
+                const k = keyFn(c);
+                if (!groups[k]) groups[k] = [];
+                groups[k].push(c);
+              });
+              return Object.keys(groups).sort().map(groupName => (
+                <React.Fragment key={groupName}>
+                  <li className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-1.5 pb-0.5 border-b border-gray-100">
+                    {groupName}
+                  </li>
+                  {groups[groupName].map(renderItem)}
+                </React.Fragment>
+              ));
+            })()}
           </ul>
         </div>
       )}
