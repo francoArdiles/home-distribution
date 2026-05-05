@@ -169,3 +169,76 @@ describe('DetailPanel — close', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe('DetailPanel — two-column layout (casa)', () => {
+  test('renders two-column container when schema has layout two-column', () => {
+    const { getByTestId } = render(
+      <DetailPanel element={casaElement} schema={casaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    expect(getByTestId('detail-layout-two-col')).toBeInTheDocument();
+  });
+
+  test('renders fields column', () => {
+    const { getByTestId } = render(
+      <DetailPanel element={casaElement} schema={casaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    expect(getByTestId('detail-fields-col')).toBeInTheDocument();
+  });
+
+  test('renders views column', () => {
+    const { getByTestId } = render(
+      <DetailPanel element={casaElement} schema={casaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    expect(getByTestId('detail-views-col')).toBeInTheDocument();
+  });
+
+  test('piscina does NOT use two-column layout', () => {
+    const { queryByTestId } = render(
+      <DetailPanel element={piscinaElement} schema={piscinaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    expect(queryByTestId('detail-layout-two-col')).not.toBeInTheDocument();
+  });
+});
+
+describe('DetailPanel — integer number fields (casa)', () => {
+  test('floors input has step=1', () => {
+    const { container } = render(
+      <DetailPanel element={casaElement} schema={casaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    const floorsInput = container.querySelector('input[data-field="floors"]');
+    expect(floorsInput).toHaveAttribute('step', '1');
+  });
+
+  test('bedrooms input has step=1', () => {
+    const { container } = render(
+      <DetailPanel element={casaElement} schema={casaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    expect(container.querySelector('input[data-field="bedrooms"]')).toHaveAttribute('step', '1');
+  });
+
+  test('bathrooms input has step=1', () => {
+    const { container } = render(
+      <DetailPanel element={casaElement} schema={casaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    expect(container.querySelector('input[data-field="bathrooms"]')).toHaveAttribute('step', '1');
+  });
+
+  test('integer field onChange emits an integer value', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <DetailPanel element={casaElement} schema={casaSchema} onChange={onChange} onClose={vi.fn()} />
+    );
+    const floorsInput = container.querySelector('input[data-field="floors"]');
+    fireEvent.change(floorsInput, { target: { value: '2' } });
+    const newDetail = onChange.mock.calls[0][0];
+    expect(Number.isInteger(newDetail.floors)).toBe(true);
+    expect(newDetail.floors).toBe(2);
+  });
+
+  test('piscina depth input (non-integer) keeps step=0.1', () => {
+    const { container } = render(
+      <DetailPanel element={piscinaElement} schema={piscinaSchema} onChange={vi.fn()} onClose={vi.fn()} />
+    );
+    expect(container.querySelector('input[data-field="depth"]')).toHaveAttribute('step', '0.1');
+  });
+});

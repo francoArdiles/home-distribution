@@ -118,6 +118,18 @@ describe('ConstraintPanel', () => {
     expect(props.onAddConstraint).toHaveBeenCalled();
   });
 
+  test('type selector lets user pick max-distance and submits type accordingly', () => {
+    const { getByLabelText, getByTestId } = render(<ConstraintPanel {...props} />);
+    fireEvent.change(getByLabelText('Origen'), { target: { value: 'e1' } });
+    fireEvent.change(getByLabelText('Destino'), { target: { value: 'e2' } });
+    fireEvent.change(getByLabelText('Tipo'), { target: { value: 'max-distance' } });
+    fireEvent.change(getByLabelText('Distancia máxima (m)'), { target: { value: '20' } });
+    fireEvent.submit(getByTestId('add-constraint-form'));
+    expect(props.onAddConstraint).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'max-distance', value: 20, sourceId: 'e1', targetId: 'e2' })
+    );
+  });
+
   test('auto-generated name describes source → target relationship', () => {
     const { getByLabelText, getByTestId } = render(<ConstraintPanel {...props} />);
     fireEvent.change(getByLabelText('Origen'), { target: { value: 'e1' } });

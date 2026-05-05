@@ -3,6 +3,7 @@ import {
   getDetailSchema,
   createDefaultDetail,
   validateDetail,
+  migrateDetail,
 } from '../../utils/detailUtils.js';
 
 describe('getDetailSchema', () => {
@@ -48,8 +49,13 @@ describe('createDefaultDetail', () => {
 
   test('creates detail with default values for casa', () => {
     const detail = createDefaultDetail('casa');
-    expect(detail._schema).toBe('casa@1');
+    expect(detail._schema).toBe('casa@3');
     expect(typeof detail.floors).toBe('number');
+    expect(Array.isArray(detail.doors)).toBe(true);
+    expect(Array.isArray(detail.windows)).toBe(true);
+    expect(Array.isArray(detail.rooms)).toBe(true);
+    expect(Array.isArray(detail.networkElements)).toBe(true);
+    expect(detail.layers).toBeDefined();
   });
 
   test('creates detail with default values for huerto', () => {
@@ -112,3 +118,44 @@ describe('validateDetail', () => {
     expect(validateDetail(detail, schema)).toEqual([]);
   });
 });
+
+describe('migrateDetail', () => {
+  test('casa@2 migrates to casa@3 with new fields', () => {
+    const old = {
+      _schema: 'casa@2',
+      floors: 2, bedrooms: 3, bathrooms: 1,
+      roofType: 'a dos aguas', construction: 'madera', notes: 'test',
+      walls: [{ id: 'w1', x1: 0, y1: 0, x2: 5, y2: 0 }],
+      labels: [],
+    };
+    const migrated = migrateDetail(old);
+    expect(migrated._schema).toBe('casa@3');
+    expect(Array.isArray(migrated.doors)).toBe(true);
+    expect(Array.isArray(migrated.windows)).toBe(true);
+    expect(Array.isArray(migrated.rooms)).toBe(true);
+    expect(Array.isArray(migrated.networkElements)).toBe(true);
+    expect(Array.isArray(migrated.networkSegments)).toBe(true);
+    expect(migrated.layers).toBeDefined();
+    expect(migrated.backgroundImage).toBeNull();
+    // Existing fields preserved
+    expect(migrated.floors).toBe(2);
+    expect(migrated.walls).toHaveLength(1);
+  });
+
+  test('casa@3 is not re-migrated', () => {
+    const current = createDefaultDetail('casa');
+    const result = migrateDetail(current);
+    expect(result).toBe(current); // same reference, no migration applied
+  });
+
+  test('unknown schema is returned as-is', () => {
+    const unknown = { _schema: 'alien@1', foo: 'bar' };
+    expect(migrateDetail(unknown)).toEqual(unknown);
+  });
+
+  test('detail without _schema is returned as-is', () => {
+    const noSchema = { floors: 1 };
+    expect(migrateDetail(noSchema)).toEqual(noSchema);
+  });
+});
+

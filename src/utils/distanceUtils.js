@@ -52,6 +52,19 @@ export const distanceRectToCircle = (rect, circle) => {
   return Math.max(0, distToEdge - circle.radius);
 };
 
+export const distanceElementToPoint = (element, point) => {
+  const shape = element.shape || 'rectangle';
+  if (shape === 'circle') {
+    const r = element.radius || element.width / 2;
+    return Math.max(0, distancePointToPoint(element, point) - r);
+  }
+  const hw = (element.rotation === 90 ? element.height : element.width) / 2;
+  const hh = (element.rotation === 90 ? element.width : element.height) / 2;
+  const dx = Math.max(0, Math.abs(point.x - element.x) - hw);
+  const dy = Math.max(0, Math.abs(point.y - element.y) - hh);
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
 export const distanceElementToElement = (elA, elB) => {
   const shapeA = elA.shape || 'rectangle';
   const shapeB = elB.shape || 'rectangle';

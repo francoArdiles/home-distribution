@@ -24,7 +24,7 @@ const nightConfig = {
 
 const elements = [
   { id: 'e1', x: 5, y: 5, width: 4, height: 2, shape: 'rectangle', elementHeight: 3, rotation: 0 },
-  { id: 'e2', x: 10, y: 10, x: 10, y: 10, width: 4, height: 4, radius: 2, shape: 'circle', elementHeight: 5, rotation: 0 },
+  { id: 'e2', x: 10, y: 10, width: 4, height: 4, radius: 2, shape: 'circle', elementHeight: 5, rotation: 0 },
 ];
 
 describe('ShadowLayer', () => {

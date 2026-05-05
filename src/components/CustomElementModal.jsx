@@ -211,10 +211,15 @@ export default function CustomElementModal({ onSave, onCancel }) {
   const canSave = name.trim().length > 0 && n >= 3 && done;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]">
-      <div className="bg-white rounded-xl p-5 w-[490px] shadow-2xl flex flex-col gap-3 text-sm">
-        <h3 className="m-0 text-base font-semibold text-gray-800">Crear objeto personalizado</h3>
+    <div className="fixed inset-0 bg-black/50 overflow-y-auto flex items-start justify-center p-4 z-[1000]">
+      <div className="bg-white rounded-xl w-[490px] shadow-2xl flex flex-col text-sm my-8 max-h-[90vh]">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 shrink-0">
+          <h3 className="m-0 text-base font-semibold text-gray-800">Crear objeto personalizado</h3>
+        </div>
 
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-5 flex flex-col gap-3">
         {/* Form fields */}
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -333,8 +338,10 @@ export default function CustomElementModal({ onSave, onCancel }) {
           </svg>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex justify-end gap-2 pt-1">
+        </div>{/* end scrollable body */}
+
+        {/* Footer — fixed, no scroll */}
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-100 shrink-0">
           <button onClick={onCancel} className="btn">Cancelar</button>
           <button
             onClick={handleSave}

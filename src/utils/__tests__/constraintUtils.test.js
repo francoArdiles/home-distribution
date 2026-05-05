@@ -112,6 +112,73 @@ describe('validateConstraint — targetId any', () => {
   });
 });
 
+describe('validateConstraint — max-distance', () => {
+  const maxBase = { id: 'm1', name: 'Max A-B', type: 'max-distance', sourceId: 'a', targetId: 'b', value: 10, enabled: true };
+
+  test('elements within max distance -> valid: true', () => {
+    // elA x=5, elB x=15 -> gap=8 <= 10
+    const result = validateConstraint(maxBase, [elA, elB], squareTerrain, baseScale);
+    expect(result.valid).toBe(true);
+    expect(result.actualDistance).toBeCloseTo(8);
+    expect(result.requiredDistance).toBe(10);
+  });
+
+  test('elements farther than max distance -> valid: false', () => {
+    const far = { id: 'far', x: 50, y: 5, width: 2, height: 2, shape: 'rectangle' };
+    const c = { ...maxBase, targetId: 'far' };
+    const result = validateConstraint(c, [elA, far], squareTerrain, baseScale);
+    expect(result.valid).toBe(false);
+  });
+
+  test('max exactly equals distance -> valid: true', () => {
+    const b = { id: 'x2', x: 15, y: 5, width: 2, height: 2, shape: 'rectangle' }; // gap 8
+    const c = { ...maxBase, targetId: 'x2', value: 8 };
+    const result = validateConstraint(c, [elA, b], squareTerrain, baseScale);
+    expect(result.valid).toBe(true);
+  });
+
+  test('disabled max-distance -> always valid', () => {
+    const c = { ...maxBase, enabled: false, value: 1 };
+    const result = validateConstraint(c, [elA, elB], squareTerrain, baseScale);
+    expect(result.valid).toBe(true);
+  });
+
+  test('max-distance with any target uses closest element', () => {
+    const c = { ...maxBase, targetId: 'any', value: 10 };
+    // closest is elClose (0m) which is <= 10 -> valid
+    const result = validateConstraint(c, [elA, elB, elClose], squareTerrain, baseScale);
+    expect(result.valid).toBe(true);
+  });
+
+  test('max-distance with any target fails when closest is too far', () => {
+    const far = { id: 'far', x: 50, y: 5, width: 2, height: 2, shape: 'rectangle' };
+    const c = { ...maxBase, targetId: 'any', value: 5 };
+    const result = validateConstraint(c, [elA, far], squareTerrain, baseScale);
+    expect(result.valid).toBe(false);
+  });
+});
+
+describe('validateConstraint — targetId entrance', () => {
+  const entrancePoint = { x: 0, y: 5 };
+  test('element within max distance from entrance → valid', () => {
+    const c = { id: 'e1', type: 'max-distance', sourceId: 'a', targetId: 'entrance', value: 30, enabled: true };
+    const result = validateConstraint(c, [elA], squareTerrain, baseScale, entrancePoint);
+    expect(result.valid).toBe(true);
+  });
+  test('element beyond max distance from entrance → invalid', () => {
+    const far = { id: 'f', x: 50, y: 5, width: 2, height: 2, shape: 'rectangle' };
+    const c = { id: 'e1', type: 'max-distance', sourceId: 'f', targetId: 'entrance', value: 10, enabled: true };
+    const result = validateConstraint(c, [far], squareTerrain, baseScale, entrancePoint);
+    expect(result.valid).toBe(false);
+  });
+  test('missing entrancePoint → treated as valid (Infinity)', () => {
+    const c = { id: 'e1', type: 'min-distance', sourceId: 'a', targetId: 'entrance', value: 5, enabled: true };
+    const result = validateConstraint(c, [elA], squareTerrain, baseScale, null);
+    expect(result.valid).toBe(true);
+    expect(result.actualDistance).toBe(Infinity);
+  });
+});
+
 describe('validateAllConstraints', () => {
   test('returns result for each enabled constraint', () => {
     const constraints = [

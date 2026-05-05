@@ -12,6 +12,7 @@ const sourceLabel = (sourceId, elements) => {
 const targetLabel = (targetId, elements) => {
   if (targetId === 'terrain') return 'Límite del terreno';
   if (targetId === 'any') return 'Cualquier otro elemento';
+  if (targetId === 'entrance') return 'Entrada del terreno';
   const el = elements.find(e => e.id === targetId);
   return el ? (el.label || el.definitionId) : targetId;
 };
@@ -27,6 +28,8 @@ const ConstraintPanel = ({
   const [formSource, setFormSource] = useState('');
   const [formTarget, setFormTarget] = useState('terrain');
   const [formValue, setFormValue] = useState('3');
+  const [formType, setFormType] = useState('min-distance');
+  const [groupBy, setGroupBy] = useState('none');
 
   const getResult = (id) => validationResults.find(r => r.constraint?.id === id);
 
@@ -38,12 +41,13 @@ const ConstraintPanel = ({
 
     const srcLabel = sourceLabel(formSource, elements);
     const tgtLabel = targetLabel(formTarget, elements);
-    const name = `${srcLabel} → ${tgtLabel} (mín. ${distance}m)`;
+    const prefix = formType === 'max-distance' ? 'máx.' : 'mín.';
+    const name = `${srcLabel} → ${tgtLabel} (${prefix} ${distance}m)`;
 
     onAddConstraint?.({
       id: generateId(),
       name,
-      type: 'min-distance',
+      type: formType,
       sourceId: formSource,
       targetId: formTarget,
       value: distance,
@@ -52,6 +56,7 @@ const ConstraintPanel = ({
     setFormSource('');
     setFormTarget('terrain');
     setFormValue('3');
+    setFormType('min-distance');
   };
 
   const handleApplyDefaults = () => {
@@ -61,49 +66,93 @@ const ConstraintPanel = ({
     });
   };
 
+  const renderConstraintItem = (c) => {
+    const result = getResult(c.id);
+    const isValid = !result || result.valid;
+    return (
+      <li key={c.id} className="flex items-start gap-1.5">
+        <span
+          data-testid={isValid ? 'constraint-valid' : 'constraint-violation'}
+          className={`font-bold min-w-[14px] ${isValid ? 'text-green-500' : 'text-red-500'}`}
+        >
+          {isValid ? '✓' : '✗'}
+        </span>
+        <input
+          type="checkbox"
+          checked={c.enabled}
+          onChange={() => onToggleConstraint?.(c.id)}
+          aria-label={`toggle-${c.id}`}
+          className="mt-0.5 accent-blue-600"
+        />
+        <span className={`flex-1 ${c.enabled ? '' : 'opacity-50'}`}>
+          {getConstraintDisplayName(c, elements)}
+          {result && !result.valid && (
+            <span className="text-red-500 text-xs ml-1">
+              ({result.actualDistance?.toFixed(1)}m / {c.type === 'max-distance' ? 'máx.' : 'mín.'} {result.requiredDistance}m)
+            </span>
+          )}
+        </span>
+        <button
+          onClick={() => onRemoveConstraint?.(c.id)}
+          className="text-xs px-1 py-0 leading-tight border border-gray-300 rounded hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
+        >
+          ×
+        </button>
+      </li>
+    );
+  };
+
+  const renderConstraintList = () => {
+    if (constraints.length === 0) {
+      return <li className="text-gray-400 italic">Sin restricciones</li>;
+    }
+    if (groupBy === 'none') {
+      const sorted = [...constraints].sort((a, b) =>
+        getConstraintDisplayName(a, elements).localeCompare(getConstraintDisplayName(b, elements))
+      );
+      return sorted.map(renderConstraintItem);
+    }
+    const keyFn = groupBy === 'origin'
+      ? (c) => sourceLabel(c.sourceId, elements)
+      : (c) => targetLabel(c.targetId, elements);
+    const groups = {};
+    constraints.forEach(c => {
+      const k = keyFn(c);
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(c);
+    });
+    return Object.keys(groups).sort().map(groupName => (
+      <React.Fragment key={groupName}>
+        <li className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-1.5 pb-0.5 border-b border-gray-100">
+          {groupName}
+        </li>
+        {groups[groupName].map(renderConstraintItem)}
+      </React.Fragment>
+    ));
+  };
+
   return (
     <div className="p-3 text-sm border-t border-gray-200">
       <h3 className="mt-0 mb-2 text-base font-semibold text-gray-800">Restricciones</h3>
 
+      <div className="flex gap-1 mb-2">
+        {[['none', 'Todas'], ['origin', 'Por origen'], ['target', 'Por destino']].map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setGroupBy(val)}
+            className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+              groupBy === val
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <ul className="list-none p-0 mb-3 space-y-1.5">
-        {constraints.length === 0 && (
-          <li className="text-gray-400 italic">Sin restricciones</li>
-        )}
-        {constraints.map(c => {
-          const result = getResult(c.id);
-          const isValid = !result || result.valid;
-          return (
-            <li key={c.id} className="flex items-start gap-1.5">
-              <span
-                data-testid={isValid ? 'constraint-valid' : 'constraint-violation'}
-                className={`font-bold min-w-[14px] ${isValid ? 'text-green-500' : 'text-red-500'}`}
-              >
-                {isValid ? '✓' : '✗'}
-              </span>
-              <input
-                type="checkbox"
-                checked={c.enabled}
-                onChange={() => onToggleConstraint?.(c.id)}
-                aria-label={`toggle-${c.id}`}
-                className="mt-0.5 accent-blue-600"
-              />
-              <span className={`flex-1 ${c.enabled ? '' : 'opacity-50'}`}>
-                {getConstraintDisplayName(c, elements)}
-                {result && !result.valid && (
-                  <span className="text-red-500 text-xs ml-1">
-                    ({result.actualDistance?.toFixed(1)}m / mín. {result.requiredDistance}m)
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={() => onRemoveConstraint?.(c.id)}
-                className="text-xs px-1 py-0 leading-tight border border-gray-300 rounded hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors"
-              >
-                ×
-              </button>
-            </li>
-          );
-        })}
+        {renderConstraintList()}
       </ul>
 
       <form onSubmit={handleSubmit} data-testid="add-constraint-form" className="flex flex-col gap-2">
@@ -134,6 +183,7 @@ const ConstraintPanel = ({
             className="form-select"
           >
             <option value="terrain">Límite del terreno</option>
+            <option value="entrance">Entrada del terreno</option>
             <option value="any">Cualquier otro elemento</option>
             {elements
               .filter(el => el.id !== formSource)
@@ -146,7 +196,21 @@ const ConstraintPanel = ({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="form-label">Distancia mínima (m)</span>
+          <span className="form-label">Tipo</span>
+          <select
+            value={formType}
+            onChange={e => setFormType(e.target.value)}
+            className="form-select"
+          >
+            <option value="min-distance">Distancia mínima</option>
+            <option value="max-distance">Distancia máxima</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="form-label">
+            {formType === 'max-distance' ? 'Distancia máxima (m)' : 'Distancia mínima (m)'}
+          </span>
           <input
             type="number"
             min="0.1"
